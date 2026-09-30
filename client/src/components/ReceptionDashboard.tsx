@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { QueueOverview, PatientStatus } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { CsvImportModal } from './CsvImportModal';
+import { WalkInModal } from './WalkInModal';
 import {
   UserCheck,
   Clock,
@@ -19,6 +20,10 @@ import {
   CheckCircle2,
   Hourglass,
   Check,
+  UserPlus,
+  Activity,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 import {
   checkInPatient,
@@ -36,12 +41,16 @@ interface ReceptionDashboardProps {
   onRefresh: () => void;
 }
 
+type FilterCategory = 'ALL' | 'BOOKED' | 'WAITING' | 'CALLED' | 'IN_CONSULTATION' | 'COMPLETED' | 'NO_SHOW' | 'WALK_IN';
+
 export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview, onRefresh }) => {
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+  const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('ALL');
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const { hospital_name, doctor, current_patient, next_patients, all_patients, stats } = overview;
+  const { hospital_name, doctor, current_patient, next_patients, all_patients, stats, summary } = overview;
 
   const showToast = (msg: string) => {
     setActionFeedback(msg);
@@ -167,6 +176,19 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
   const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
   const hasWaitingPatients = next_patients.length > 0;
 
+  // Filtered Patients List (Section 4)
+  const filteredPatients = all_patients.filter((p) => {
+    if (selectedFilter === 'ALL') return true;
+    if (selectedFilter === 'BOOKED') return p.status === 'BOOKED';
+    if (selectedFilter === 'WAITING') return p.status === 'WAITING';
+    if (selectedFilter === 'CALLED') return p.status === 'CALLED';
+    if (selectedFilter === 'IN_CONSULTATION') return p.status === 'IN_CONSULTATION';
+    if (selectedFilter === 'COMPLETED') return p.status === 'COMPLETED';
+    if (selectedFilter === 'NO_SHOW') return p.status === 'NO_SHOW' || p.status === 'SKIPPED';
+    if (selectedFilter === 'WALK_IN') return p.is_walk_in === true;
+    return true;
+  });
+
   return (
     <div className="space-y-6 pb-12">
       {/* Toast Bar */}
@@ -204,12 +226,32 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             </div>
           </div>
 
-          {/* Doctor Status Toggle & HMS CSV Import Button */}
+          {/* Action Toolbar: + Walk-In, Import CSV, Doctor Delay Toggle */}
           <div className="flex flex-wrap items-center gap-3">
+            
+            {/* + WALK-IN PATIENT BUTTON (Section 3) */}
+            <button
+              onClick={() => setIsWalkInModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-hospital-600 hover:bg-hospital-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-hospital-600/20 transition"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ WALK-IN PATIENT</span>
+            </button>
+
+            {/* IMPORT APPOINTMENTS BUTTON (Section 2) */}
+            <button
+              onClick={() => setIsCsvModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-hospital-300" />
+              <span>IMPORT APPOINTMENTS</span>
+            </button>
+
+            {/* Doctor Delay Status Toggle (Section 9) */}
             <button
               onClick={handleToggleDoctorDelay}
               disabled={isUpdating}
-              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition text-left shadow-sm ${
+              className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border transition text-left shadow-sm ${
                 isDoctorDelayed
                   ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
                   : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
@@ -218,7 +260,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             >
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Doctor Status (Click to Toggle)
+                  Doctor Status
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span
@@ -228,82 +270,73 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                         : 'bg-emerald-500 animate-pulse'
                     }`}
                   />
-                  <span className="text-sm font-bold">
+                  <span className="text-xs sm:text-sm font-bold">
                     {isDoctorDelayed ? 'DOCTOR DELAYED (15m)' : 'AVAILABLE'}
                   </span>
                 </div>
               </div>
             </button>
-
-            <button
-              onClick={() => setIsCsvModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-hospital-300" />
-              <span>Import HMS Appointments</span>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* TODAY'S STATISTICS CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Booked</span>
-            <CalendarCheck className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
+      {/* DYNAMIC DASHBOARD STATISTICS CARDS (Section 5) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Total Booked</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-slate-900">{stats.total}</span>
-            <span className="text-xs text-slate-500">Appointments</span>
+            <span className="text-[10px] text-slate-400">Appts</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-amber-700">Waiting in Queue</span>
-            <Hourglass className="w-4 h-4 text-amber-500" />
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-sky-700 uppercase">Checked In</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-sky-700">{stats.checked_in}</span>
+            <span className="text-[10px] text-sky-600">Total</span>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-amber-700 uppercase">Waiting</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-amber-700">{stats.waiting}</span>
-            <span className="text-xs text-amber-600">Patients</span>
+            <span className="text-[10px] text-amber-600">In Line</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700">In Consultation / Called</span>
-            <UserCheck className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-emerald-700 uppercase">In Room</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-emerald-700">
               {stats.in_consultation + (current_patient?.status === 'CALLED' ? 1 : 0)}
             </span>
-            <span className="text-xs text-emerald-600">Active</span>
+            <span className="text-[10px] text-emerald-600">Active</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-teal-700">Completed</span>
-            <CheckCircle2 className="w-4 h-4 text-teal-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-teal-700 uppercase">Completed</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-teal-700">{stats.completed}</span>
-            <span className="text-xs text-teal-600">Finished</span>
+            <span className="text-[10px] text-teal-600">Done</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-rose-700">No Show / Skipped</span>
-            <UserX className="w-4 h-4 text-rose-500" />
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-rose-700 uppercase">No Show</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-rose-700">{stats.no_show + stats.skipped}</span>
+            <span className="text-[10px] text-rose-600">Missed</span>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-rose-700">
-              {stats.no_show + stats.skipped}
-            </span>
-            <span className="text-xs text-rose-600">Missed</span>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+          <span className="text-[11px] font-bold text-purple-700 uppercase">Walk-Ins</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-purple-700">{stats.walk_ins}</span>
+            <span className="text-[10px] text-purple-600">Added</span>
           </div>
         </div>
       </div>
@@ -311,7 +344,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
       {/* CORE QUEUE MANAGEMENT ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT: CURRENTLY SERVING & ACTIVE ACTIONS (5 cols) */}
+        {/* LEFT: CURRENTLY SERVING & ACTION CONSOLE (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           
           {/* CURRENTLY SERVING CARD */}
@@ -340,6 +373,11 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                     <div className="text-xl font-bold text-slate-800 mt-1">
                       {current_patient.patient_name}
                     </div>
+                    {current_patient.is_walk_in && (
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                        Walk-In Patient
+                      </span>
+                    )}
                   </div>
                   <StatusBadge status={current_patient.status} size="md" />
                 </div>
@@ -355,7 +393,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                   </div>
                 </div>
 
-                {/* CONTEXTUAL ACTION BUTTONS FOR ACTIVE PATIENT */}
+                {/* CONTEXTUAL ACTION BUTTONS */}
                 <div className="mt-4 pt-4 border-t border-slate-200">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
                     Active Patient Actions
@@ -428,7 +466,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
               </div>
             )}
 
-            {/* CALL NEXT BUTTON SECTION (Section 3) */}
+            {/* CALL NEXT BUTTON */}
             <div className="mt-5 pt-4 border-t border-slate-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -460,30 +498,54 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             </div>
           </div>
 
-          {/* SECTION 11: CSV / EXCEL IMPORT FOUNDATION CARD */}
-          <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
-            <div className="flex items-center justify-between mb-2">
+          {/* SECTION 6: TODAY'S SUMMARY CARD */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-hospital-600" />
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  IMPORT TODAY'S APPOINTMENTS
+                <BarChart3 className="w-4 h-4 text-hospital-600" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                  TODAY'S SUMMARY
                 </h4>
               </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Live Data
+              </span>
             </div>
-            <p className="text-xs text-slate-600 leading-relaxed mb-4">
-              Import today's appointments from the hospital's existing HMS.
-            </p>
-            <button
-              onClick={() => setIsCsvModalOpen(true)}
-              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-hospital-600" />
-              <span>Upload CSV</span>
-            </button>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Total Appointments</span>
+                <span className="font-bold text-slate-900 font-mono">{summary.total_appointments}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Checked In</span>
+                <span className="font-bold text-sky-700 font-mono">{summary.checked_in_count}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Completed</span>
+                <span className="font-bold text-teal-700 font-mono">{summary.completed_count}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">No Show / Skipped</span>
+                <span className="font-bold text-rose-700 font-mono">{summary.no_show_count + summary.skipped_count}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Walk-Ins</span>
+                <span className="font-bold text-purple-700 font-mono">{summary.walk_ins_count}</span>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-slate-500 font-medium flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-hospital-600" /> Average Wait Time
+                </span>
+                <span className="font-bold text-hospital-700 font-mono bg-hospital-50 px-2 py-0.5 rounded">
+                  ~{summary.avg_waiting_time_minutes} mins
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: NEXT PATIENTS QUEUE & ALL TODAY'S APPOINTMENTS TABLE (7 cols) */}
+        {/* RIGHT: NEXT PATIENTS QUEUE & FILTERABLE TODAY'S PATIENTS TABLE (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           
           {/* NEXT PATIENTS SECTION (FIFO Queue) */}
@@ -520,6 +582,11 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                           <span className="font-bold text-sm text-slate-800">
                             {patient.patient_name}
                           </span>
+                          {patient.is_walk_in && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                              Walk-in
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                           <Clock className="w-3 h-3 text-slate-400" />
@@ -560,30 +627,58 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             ) : (
               <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                 <p className="text-sm font-medium">No patients are currently waiting.</p>
-                <p className="text-xs text-slate-400 mt-1">Check in BOOKED patients from the table below to add them to the waiting queue.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Click "+ WALK-IN PATIENT" or check in booked patients below to populate the queue.
+                </p>
               </div>
             )}
           </div>
 
-          {/* ALL TODAY'S APPOINTMENTS TABLE (A01 - A10) */}
+          {/* SECTION 4: TODAY'S PATIENTS WITH SIMPLE FILTERS */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
-                  Today's HMS Appointments (A01 - A10)
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  Source of Truth from Hospital HMS • Click Check In when patient arrives
-                </p>
+            <div className="p-4 sm:p-5 border-b border-slate-200 space-y-3 bg-slate-50/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+                    TODAY'S PATIENTS ({all_patients.length})
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Integrated view of hospital appointments and floor walk-ins
+                  </p>
+                </div>
               </div>
-              <span className="text-xs font-mono font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-700">
-                Total: {all_patients.length}
-              </span>
+
+              {/* Simple Filter Pills (Section 4) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                {(['ALL', 'BOOKED', 'WAITING', 'CALLED', 'IN_CONSULTATION', 'COMPLETED', 'NO_SHOW', 'WALK_IN'] as FilterCategory[]).map(
+                  (filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setSelectedFilter(filter)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+                        selectedFilter === filter
+                          ? 'bg-hospital-600 text-white shadow-sm'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {filter === 'ALL'
+                        ? 'All'
+                        : filter === 'IN_CONSULTATION'
+                        ? 'In Consultation'
+                        : filter === 'NO_SHOW'
+                        ? 'No Show / Skipped'
+                        : filter === 'WALK_IN'
+                        ? 'Walk-ins'
+                        : filter.charAt(0) + filter.slice(1).toLowerCase()}
+                    </button>
+                  )
+                )}
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[480px]">
               <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-slate-100/70 text-slate-600 font-bold uppercase text-[11px] border-b border-slate-200">
+                <thead className="bg-slate-100/80 text-slate-600 font-bold uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-3">Token</th>
                     <th className="px-4 py-3">Patient Name</th>
@@ -593,88 +688,103 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {all_patients.map((p) => {
-                    const isCurrent = current_patient?.id === p.id;
-                    return (
-                      <tr
-                        key={p.id}
-                        className={`hover:bg-slate-50/80 transition ${
-                          isCurrent ? 'bg-emerald-50/40 font-medium' : ''
-                        }`}
-                      >
-                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                          {p.token}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">
-                          {p.patient_name}
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">
-                          {p.appointment_time}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={p.status} size="sm" />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* 1. BOOKED PATIENT -> CHECK IN */}
-                            {p.status === 'BOOKED' && (
-                              <button
-                                onClick={() => handleCheckIn(p.id, p.token, p.patient_name)}
-                                disabled={isUpdating}
-                                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-hospital-600 hover:bg-hospital-700 text-white shadow-sm transition"
-                              >
-                                CHECK IN
-                              </button>
-                            )}
+                  {filteredPatients.length > 0 ? (
+                    filteredPatients.map((p) => {
+                      const isCurrent = current_patient?.id === p.id;
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`hover:bg-slate-50/80 transition ${
+                            isCurrent ? 'bg-emerald-50/40 font-medium' : ''
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                            <div className="flex items-center gap-1.5">
+                              <span>{p.token}</span>
+                              {p.is_walk_in && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-700 rounded">
+                                  W
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-800">
+                            {p.patient_name}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500">
+                            {p.appointment_time}
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={p.status} size="sm" />
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* BOOKED -> CHECK IN */}
+                              {p.status === 'BOOKED' && (
+                                <button
+                                  onClick={() => handleCheckIn(p.id, p.token, p.patient_name)}
+                                  disabled={isUpdating}
+                                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-hospital-600 hover:bg-hospital-700 text-white shadow-sm transition"
+                                >
+                                  CHECK IN
+                                </button>
+                              )}
 
-                            {/* 2. WAITING PATIENT */}
-                            {p.status === 'WAITING' && (
-                              <button
-                                onClick={handleCallNext}
-                                disabled={isUpdating}
-                                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-hospital-50 hover:bg-hospital-100 text-hospital-800 border border-hospital-200 transition"
-                              >
-                                Call Next
-                              </button>
-                            )}
+                              {/* WAITING */}
+                              {p.status === 'WAITING' && (
+                                <button
+                                  onClick={handleCallNext}
+                                  disabled={isUpdating}
+                                  className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-hospital-50 hover:bg-hospital-100 text-hospital-800 border border-hospital-200 transition"
+                                >
+                                  Call Next
+                                </button>
+                              )}
 
-                            {/* 3. CALLED PATIENT */}
-                            {p.status === 'CALLED' && (
-                              <button
-                                onClick={() => handleStartConsultation(p.id, p.token)}
-                                disabled={isUpdating}
-                                className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
-                              >
-                                Start Consultation
-                              </button>
-                            )}
+                              {/* CALLED */}
+                              {p.status === 'CALLED' && (
+                                <button
+                                  onClick={() => handleStartConsultation(p.id, p.token)}
+                                  disabled={isUpdating}
+                                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
+                                >
+                                  Start Consultation
+                                </button>
+                              )}
 
-                            {/* 4. IN CONSULTATION */}
-                            {p.status === 'IN_CONSULTATION' && (
-                              <button
-                                onClick={() => handleCompleteConsultation(p.id, p.token)}
-                                disabled={isUpdating}
-                                className="text-xs font-bold px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
-                              >
-                                Complete
-                              </button>
-                            )}
+                              {/* IN CONSULTATION */}
+                              {p.status === 'IN_CONSULTATION' && (
+                                <button
+                                  onClick={() => handleCompleteConsultation(p.id, p.token)}
+                                  disabled={isUpdating}
+                                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
+                                >
+                                  Complete
+                                </button>
+                              )}
 
-                            {/* 5. COMPLETED / SKIPPED / NO SHOW -> RE-QUEUE OPTION */}
-                            {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
-                              <button
-                                onClick={() => handleRequeue(p.id, p.token)}
-                                disabled={isUpdating}
-                                className="text-[11px] font-medium text-slate-500 hover:text-slate-800 underline transition"
-                              >
-                                Re-queue
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                              {/* COMPLETED / SKIPPED / NO SHOW -> RE-QUEUE */}
+                              {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
+                                <button
+                                  onClick={() => handleRequeue(p.id, p.token)}
+                                  disabled={isUpdating}
+                                  className="text-[11px] font-medium text-slate-500 hover:text-slate-800 underline transition"
+                                >
+                                  Re-queue
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-400">
+                        No patients matching filter "{selectedFilter}"
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -684,10 +794,24 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
 
       </div>
 
-      {/* CSV Import Modal */}
+      {/* CSV Import Modal (Section 2) */}
       <CsvImportModal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
+        onSuccess={(count) => {
+          showToast(`Imported ${count} appointments from HMS.`);
+          onRefresh();
+        }}
+      />
+
+      {/* Walk-In Modal (Section 3) */}
+      <WalkInModal
+        isOpen={isWalkInModalOpen}
+        onClose={() => setIsWalkInModalOpen(false)}
+        onSuccess={(token, name) => {
+          showToast(`Registered Walk-In: ${token} — ${name}`);
+          onRefresh();
+        }}
       />
     </div>
   );

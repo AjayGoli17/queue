@@ -1,78 +1,69 @@
 # City Care Hospital — Queue & Patient Flow Management System
 
-A full-stack, real-time client demonstration prototype built to manage patient flow, floor queues, and waiting experiences beside existing hospital management software (HMS).
+A full-stack, real-time client demonstration prototype designed to manage patient flow, floor queues, and waiting experiences beside existing hospital management software (HMS).
 
 ---
 
-## 🌟 Primary Goal & Architecture
+## 🏥 Hospital System Concept & Separation of Concerns
 
-$$\text{Appointment (HMS)} \longrightarrow \text{Arrival} \longrightarrow \text{Check-in} \longrightarrow \text{Queue} \longrightarrow \text{Waiting} \longrightarrow \text{Calling} \longrightarrow \text{Consultation} \longrightarrow \text{Completion}$$
+$$\text{Existing HMS (Appointments \& Billing)} \xrightarrow{\text{Export Today's CSV / Walk-in Arrival}} \mathbf{\text{Queue \& Patient Flow System}} \longrightarrow \text{Real-time Display \& Mobile Tracking}$$
 
-### Core Patient Lifecycle:
-$$\text{BOOKED} \xrightarrow{\text{Check-In}} \text{WAITING} \xrightarrow{\text{Call Next}} \text{CALLED} \xrightarrow{\text{Start}} \text{IN\_CONSULTATION} \xrightarrow{\text{Complete}} \text{COMPLETED}$$
-$$\text{WAITING / CALLED} \xrightarrow{\text{Skip}} \text{SKIPPED} \qquad \text{WAITING / CALLED} \xrightarrow{\text{No Show}} \text{NO\_SHOW}$$
+- **Existing HMS**: Remains the hospital's single source of truth for appointments, registration, and billing.
+- **Our Queue System**: Takes over as soon as patients arrive, managing Check-in, Queueing, Waiting Room TV displays, Mobile Patient Tracking, Calling, and Consultation completion.
 
 ---
 
-## ⚡ Prompt 2 End-to-End Features
+## ✨ Client Demo Features
 
-### 1. 📋 Real-Time Reception Queue Controls
-- **Check-In**: Turn `BOOKED` patients into `WAITING` with automatic entry into FIFO queue with timestamp.
-- **Predictable FIFO Queue**: Next patient is strictly determined by arrival/check-in order.
-- **CALL NEXT**: Calls the next waiting patient, sets status to `CALLED`, assigns them to the consultation room, and broadcasts instant real-time updates to all connected screens.
-- **Consultation Workflow**:
-  - `START CONSULTATION` $\rightarrow$ `IN_CONSULTATION`
-  - `COMPLETE CONSULTATION` $\rightarrow$ `COMPLETED` (clears room, ready for next patient)
-- **Skip & No-Show**: Moves patients out of the active queue while retaining their historical records in the database.
-- **Doctor Delay Toggle**: One-click delay status switch (`Available` $\leftrightarrow$ `DOCTOR DELAYED`).
+### 1. 📋 Floor Reception Dashboard
+- **`+ WALK-IN PATIENT`**: Instant walk-in registration generating the next available token (e.g. `A11`), assigning `WAITING` status, and placing the patient into the active FIFO queue.
+- **`IMPORT APPOINTMENTS`**: Batch import today's appointments exported from existing HMS via CSV (`Patient Name`, `Phone`, `Doctor`, `Appointment Time`) with automatic token assignment and `BOOKED` status.
+- **Queue Controls**: `CALL NEXT`, `START CONSULTATION`, `COMPLETE CONSULTATION`, `SKIP`, `NO SHOW`, and `DELAY`.
+- **Dynamic Stats**: Total Booked, Checked In, Waiting, In Consultation, Completed, No Show/Skipped, Walk-Ins.
+- **Today's Summary**: Live overview card showing total appointments, check-ins, completed consultations, walk-in count, and average waiting time.
+- **Filterable Table**: Quick filters for `All`, `Booked`, `Waiting`, `Called`, `In Consultation`, `Completed`, `No Show / Skipped`, and `Walk-ins`.
 
-### 2. 📱 Live Patient Tracking Page
-- Calculates exact **`PATIENTS AHEAD`** position in real-time from the database.
-- **Token Called Banner**: When called, shows prominent announcement:
-  > **YOUR TOKEN HAS BEEN CALLED**  
-  > Please proceed to: **Dr. Kumar — Room 2**
-- **Doctor Delay Alert**: Displays notice when the doctor is delayed:
-  > **Dr. Kumar is currently delayed.**  
-  > Please remain in the waiting area.
+### 2. 📱 Patient Tracking Page (Mobile Friendly)
+- Real-time token status lookup with phone frame preview option.
+- Displays:
+  - **`YOUR TOKEN`**: `A07`
+  - **`STATUS`**: `WAITING`
+  - **`NOW SERVING`**: `A06`
+  - **`PATIENTS AHEAD`**: `0`
+  - **`DOCTOR`**: `Dr. Kumar — Room 2`
+  - **`HOSPITAL`**: `City Care Hospital`
+- **CALLED Announcement Banner**: Prominently flashes when called into the doctor's room.
+- **Doctor Delay Notice**: Displays alert when the doctor is marked as delayed.
 
 ### 3. 📺 Waiting-Room TV Display
-- **Now Serving**: High-visibility hero banner for the current token & patient name.
-- **Next List**: Real-time waiting list ordered by queue arrival time.
-- **Doctor Delayed Banner**: Full-width notice displayed across the top when doctor delay is active.
+- High-contrast, large typography designed for distance visibility on TV monitors.
+- **NOW SERVING**: Large token, patient name, doctor, and room number.
+- **NEXT**: Waiting queue list ordered by arrival time.
+- **Doctor Delay Alert Banner**: Full-width notice displayed when doctor delay is active.
 
-### 4. ⚡ Live Real-Time Synchronization (WebSockets)
-- Backend broadcasts real-time `QUEUE_UPDATED` events over WebSocket (`/ws`).
-- All open windows (Reception, TV Display, Patient Mobile Tracker) synchronize instantly with zero page reloads.
+### 4. ⚡ Live Real-Time Multi-Screen Synchronization (WebSockets)
+- Built on WebSockets (`/ws`) for instant synchronization across all open browser windows without manual page refreshing.
+
+### 5. 🔄 Demo Reset Menu
+- Clearly separated dropdown menu to quickly reset to:
+  - **Morning State (All Booked: A01 - A10)** for fresh check-in walkthroughs.
+  - **Mid-Day Live Queue Flow (A05 In Consultation, A06-A09 Waiting)**.
 
 ---
 
 ## 🧪 Automated End-to-End Verification Test
 
-To run the complete automated test suite verifying all 10 steps of the Section 12 lifecycle:
+Run the full automated test suite verifying all 12 steps of the client demonstration flow:
 
 \`\`\`bash
 npm test
 \`\`\`
 
-**Verified Steps in Test Suite:**
-1. Reset to `ALL BOOKED`
-2. Check in `A05 (Sneha Rao)` $\rightarrow$ `WAITING`
-3. Check in `A06 (Arjun Patel)` $\rightarrow$ `WAITING`
-4. Check in `A07 (Meena Das)` $\rightarrow$ `WAITING`
-5. Verify `A07` tracking $\rightarrow$ `PATIENTS AHEAD = 2`
-6. Click `CALL NEXT` $\rightarrow$ `A05` becomes `CALLED`; `A07` tracking $\rightarrow$ `PATIENTS AHEAD = 1`
-7. `START CONSULTATION` $\rightarrow$ `A05` becomes `IN_CONSULTATION`
-8. `COMPLETE CONSULTATION` $\rightarrow$ `A05` becomes `COMPLETED`
-9. Click `CALL NEXT` $\rightarrow$ `A06` becomes `CALLED`; `A07` tracking $\rightarrow$ `NOW SERVING = A06`, `PATIENTS AHEAD = 0`
-10. Click `CALL NEXT` $\rightarrow$ `A07` becomes `CALLED`; `A07` tracking $\rightarrow$ `CALLED` banner
-11. Toggle Doctor Delay $\rightarrow$ `DOCTOR DELAYED` alert on all screens
-12. 11+ real-time WebSocket broadcasts delivered without errors.
-
 ---
 
 ## 🚀 Quick Start
 
-### 1. Start Server & Client
+### 1. Start Both Backend & Frontend
 \`\`\`bash
 npm run dev
 \`\`\`
@@ -80,8 +71,8 @@ npm run dev
 - **Frontend Application**: [http://localhost:3000](http://localhost:3000)
 - **Backend API & WebSockets**: [http://localhost:5001](http://localhost:5001)
 
-### 2. Multi-Window Live Demo Setup:
-- **Window 1**: Open [http://localhost:3000](http://localhost:3000) on **Reception Dashboard**
-- **Window 2**: Open [http://localhost:3000](http://localhost:3000) on **Waiting TV Display**
-- **Window 3**: Open [http://localhost:3000](http://localhost:3000) on **Patient Tracking** (enter `A07`)
-- Perform actions on Reception (Check In, Call Next, Start Consultation, Complete Consultation, Delay) and watch all 3 screens update in real-time!
+### 2. Recommended 3-Window Client Demonstration:
+1. **Window 1**: Open [http://localhost:3000](http://localhost:3000) (Reception Dashboard)
+2. **Window 2**: Open [http://localhost:3000](http://localhost:3000) $\rightarrow$ switch to **Waiting TV Display**
+3. **Window 3**: Open [http://localhost:3000](http://localhost:3000) $\rightarrow$ switch to **Patient Tracking** (enter `A07`)
+4. Trigger actions on Reception (Check In, Call Next, Start Consultation, Complete Consultation, + Walk-In, Delay) and observe Window 2 and Window 3 update in real-time!
