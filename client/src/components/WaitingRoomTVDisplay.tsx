@@ -6,6 +6,7 @@ import {
   DoorOpen,
   Maximize2,
   Minimize2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface WaitingRoomTVDisplayProps {
@@ -18,6 +19,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
   const [date, setDate] = useState<string>('');
 
   const { hospital_name, doctor, current_patient, next_patients } = overview;
+  const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
 
   useEffect(() => {
     const updateTime = () => {
@@ -56,7 +58,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-hospital-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* 1. TV TOP BAR (Section 8 Specifications) */}
+      {/* 1. TV TOP BAR */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800 relative z-10">
         
         {/* Hospital Branding */}
@@ -90,11 +92,11 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
             </div>
           </div>
 
-          {/* Doctor Status: Available (Section 8) */}
+          {/* Doctor Status Area */}
           <div className="bg-slate-900/90 border border-slate-700/80 px-4 py-2.5 rounded-2xl flex items-center gap-2.5">
             <span
               className={`w-3.5 h-3.5 rounded-full ${
-                doctor.delay_status.includes('Delay')
+                isDoctorDelayed
                   ? 'bg-amber-400 animate-ping'
                   : 'bg-emerald-400 animate-pulse'
               }`}
@@ -103,12 +105,12 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               Doctor Status:{' '}
               <span
                 className={
-                  doctor.delay_status.includes('Delay')
-                    ? 'text-amber-400'
-                    : 'text-emerald-400'
+                  isDoctorDelayed
+                    ? 'text-amber-400 uppercase font-black'
+                    : 'text-emerald-400 uppercase'
                 }
               >
-                {doctor.delay_status}
+                {isDoctorDelayed ? 'DOCTOR DELAYED' : 'AVAILABLE'}
               </span>
             </div>
           </div>
@@ -134,8 +136,28 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
         </div>
       </header>
 
+      {/* DOCTOR DELAY ALERT BANNER (Section 9) */}
+      {isDoctorDelayed && (
+        <div className="my-4 p-4 rounded-2xl bg-amber-500/20 border-2 border-amber-500/60 flex items-center justify-between text-amber-300 animate-pulse relative z-10">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+            <div>
+              <span className="text-base sm:text-lg font-black tracking-wide uppercase">
+                {doctor.name} — {doctor.room} • DOCTOR DELAYED
+              </span>
+              <p className="text-xs sm:text-sm font-medium text-amber-200/90">
+                Please remain in the waiting area. Consultations will resume shortly.
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block font-mono text-xs font-bold px-3 py-1 bg-amber-500/30 rounded-lg text-amber-300 border border-amber-500/40">
+            OPD DELAY NOTICE
+          </span>
+        </div>
+      )}
+
       {/* 2. MAIN TV CONTENT GRID */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 my-8 relative z-10 items-stretch">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 my-6 relative z-10 items-stretch">
         
         {/* LEFT / CENTER: HERO NOW SERVING SECTION (7 cols) */}
         <div className="lg:col-span-7 bg-gradient-to-br from-slate-900/90 via-slate-900 to-slate-950 rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-2xl flex flex-col justify-between relative overflow-hidden">
@@ -151,7 +173,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               </h2>
             </div>
             <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-black text-xs sm:text-sm px-4 py-1.5 rounded-full uppercase tracking-wider">
-              Consultation in Progress
+              {current_patient?.status === 'CALLED' ? 'TOKEN CALLED' : 'CONSULTATION ACTIVE'}
             </div>
           </div>
 
@@ -204,7 +226,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               </span>
             </div>
 
-            {/* List of Next 4-5 Patients (Section 8: A06, A07, A08, A09) */}
+            {/* List of Next Patients in FIFO order */}
             <div className="mt-5 space-y-3.5">
               {next_patients.length > 0 ? (
                 next_patients.slice(0, 4).map((p, idx) => (
@@ -231,7 +253,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
                 ))
               ) : (
                 <div className="py-12 text-center text-slate-500">
-                  <p className="text-base font-semibold">No more patients waiting in queue</p>
+                  <p className="text-base font-semibold">No patients are currently waiting.</p>
                 </div>
               )}
             </div>
@@ -252,7 +274,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span className="font-semibold text-slate-300">
-            Live Queue Synchronization Active
+            Real-Time Live Queue Synchronization
           </span>
           <span className="text-slate-600">•</span>
           <span>City Care Hospital OPD Floor 1</span>

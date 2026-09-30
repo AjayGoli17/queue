@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { PatientTrackingInfo } from '../types';
 import { fetchPatientTracking } from '../services/api';
+import { wsClient } from '../services/websocket';
 import { StatusBadge } from './StatusBadge';
 import {
   Search,
@@ -10,6 +11,9 @@ import {
   Info,
   Smartphone,
   RotateCw,
+  BellRing,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface PatientTrackingPageProps {
@@ -18,10 +22,14 @@ interface PatientTrackingPageProps {
 
 export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initialToken = 'A07' }) => {
   const [tokenInput, setTokenInput] = useState<string>(initialToken);
+  const [activeToken, setActiveToken] = useState<string>(initialToken);
   const [trackingData, setTrackingData] = useState<PatientTrackingInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileFrame, setMobileFrame] = useState<boolean>(false);
+  const activeTokenRef = useRef(activeToken);
+
+  activeTokenRef.current = activeToken;
 
   const handleSearch = async (tokenToFetch?: string) => {
     const query = (tokenToFetch || tokenInput).trim().toUpperCase();
@@ -34,6 +42,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
     try {
       const data = await fetchPatientTracking(query);
       setTrackingData(data);
+      setActiveToken(query);
     } catch (err: any) {
       setErrorMessage(err.message || 'Token not found. Please check your token number.');
       setTrackingData(null);
@@ -46,14 +55,28 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
     handleSearch(initialToken);
   }, []);
 
+  // Real-time WebSocket subscription: Automatically re-fetches tracking when queue updates
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(() => {
+      if (activeTokenRef.current) {
+        fetchPatientTracking(activeTokenRef.current)
+          .then((data) => setTrackingData(data))
+          .catch(() => {});
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   const demoTokens = ['A05', 'A06', 'A07', 'A08', 'A09', 'A10'];
+  const isCalled = trackingData?.status === 'CALLED';
+  const isDoctorDelayed = trackingData?.is_doctor_delayed;
 
   const content = (
-    <div className="w-full max-w-md mx-auto space-y-6">
+    <div className="w-full max-w-md mx-auto space-y-5">
       
       {/* Header with Hospital Branding */}
       <div className="text-center space-y-1">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-hospital-600 text-white shadow-lg shadow-hospital-600/20 mb-2">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-hospital-600 text-white shadow-lg shadow-hospital-600/20 mb-1">
           <Building2 className="w-6 h-6" />
         </div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -64,8 +87,8 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         </p>
       </div>
 
-      {/* TOKEN ENTRY FORM (Section 7) */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
+      {/* TOKEN ENTRY FORM */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
         <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
           Enter your token
         </label>
@@ -96,7 +119,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         </div>
 
         {/* Quick Demo Token Selector */}
-        <div className="pt-2 flex items-center justify-between">
+        <div className="pt-1 flex items-center justify-between">
           <span className="text-[11px] font-medium text-slate-400">Quick Tokens:</span>
           <div className="flex gap-1.5 flex-wrap">
             {demoTokens.map((t) => (
@@ -126,10 +149,37 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         </div>
       )}
 
-      {/* TRACKING DETAILS CARD (Section 7 Specifications) */}
+      {/* TRACKING DETAILS CARD */}
       {trackingData && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-md shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
           
+          {/* 1. SPECIAL "CALLED" BANNER (Section 6) */}
+          {isCalled && (
+            <div className="p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center space-y-2 animate-bounce">
+              <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full">
+                <BellRing className="w-4 h-4 text-white animate-spin" />
+                <span>YOUR TOKEN HAS BEEN CALLED</span>
+              </div>
+              <p className="text-sm font-semibold">
+                Please proceed to:
+              </p>
+              <div className="text-xl font-black bg-white text-slate-900 py-2 px-4 rounded-xl shadow-md inline-block">
+                {trackingData.doctor_name} — {trackingData.room}
+              </div>
+            </div>
+          )}
+
+          {/* 2. DOCTOR DELAY ALERT (Section 9) */}
+          {isDoctorDelayed && (
+            <div className="p-4 bg-amber-500 text-amber-950 font-semibold text-xs flex items-start gap-2.5 border-b border-amber-600">
+              <AlertTriangle className="w-4 h-4 text-amber-950 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">{trackingData.doctor_name} is currently delayed.</p>
+                <p className="text-[11px] opacity-90 mt-0.5">Please remain in the waiting area.</p>
+              </div>
+            </div>
+          )}
+
           {/* Top Token & Status Header */}
           <div className="p-6 bg-gradient-to-b from-hospital-50/60 to-transparent border-b border-slate-100 text-center space-y-3">
             <div>
@@ -174,9 +224,13 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                 {trackingData.patients_ahead}
               </div>
               <div className="text-[11px] font-medium text-slate-500 mt-0.5">
-                {trackingData.patients_ahead === 0
-                  ? 'You are next!'
-                  : `${trackingData.patients_ahead} in front of you`}
+                {trackingData.status === 'CALLED'
+                  ? 'Called into room!'
+                  : trackingData.status === 'IN_CONSULTATION'
+                  ? 'Currently in room'
+                  : trackingData.patients_ahead === 0
+                  ? 'You are next in queue!'
+                  : `${trackingData.patients_ahead} ahead of you`}
               </div>
             </div>
           </div>
@@ -221,7 +275,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
           <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Connected to live hospital queue</span>
+              <span className="font-medium text-slate-700">Real-time WebSocket active</span>
             </div>
             <button
               onClick={() => handleSearch()}

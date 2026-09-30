@@ -1,106 +1,87 @@
 # City Care Hospital — Queue & Patient Flow Management System
 
-A full-stack client demonstration prototype built to manage patient flow, floor queues, and waiting experiences beside existing hospital management software (HMS).
+A full-stack, real-time client demonstration prototype built to manage patient flow, floor queues, and waiting experiences beside existing hospital management software (HMS).
 
 ---
 
-## 🌟 Overview & Product Architecture
-
-Our system does **not** replace the existing hospital HMS (appointments, registration, billing). Instead, it sits beside it to power the floor experience:
+## 🌟 Primary Goal & Architecture
 
 $$\text{Appointment (HMS)} \longrightarrow \text{Arrival} \longrightarrow \text{Check-in} \longrightarrow \text{Queue} \longrightarrow \text{Waiting} \longrightarrow \text{Calling} \longrightarrow \text{Consultation} \longrightarrow \text{Completion}$$
 
+### Core Patient Lifecycle:
+$$\text{BOOKED} \xrightarrow{\text{Check-In}} \text{WAITING} \xrightarrow{\text{Call Next}} \text{CALLED} \xrightarrow{\text{Start}} \text{IN\_CONSULTATION} \xrightarrow{\text{Complete}} \text{COMPLETED}$$
+$$\text{WAITING / CALLED} \xrightarrow{\text{Skip}} \text{SKIPPED} \qquad \text{WAITING / CALLED} \xrightarrow{\text{No Show}} \text{NO\_SHOW}$$
+
 ---
 
-## 🚀 Key Features Built in Prototype
+## ⚡ Prompt 2 End-to-End Features
 
-### 1. 📋 Doctor-Floor Reception Dashboard
-- **Hospital**: City Care Hospital
-- **Doctor / Room**: Dr. Kumar — Room 2 (Doctor Status: Available)
-- **Currently Serving Card**: Prominent display of active patient (`A05 — Sneha Rao`)
-- **Next Patients Queue**: Live queue list (`A06 — Arjun Patel`, `A07 — Meena Das`, `A08 — Suresh Reddy`, `A09 — Kavya Sharma`)
-- **Queue Action Controls**: `CALL NEXT`, `DELAY`, `SKIP`, `NO SHOW`
-- **Today's Statistics**: Total Booked, Waiting, In Consultation, Completed, No Show/Skipped
-- **All Today's Appointments**: Full synchronized table for tokens `A01` to `A10`
-- **HMS Appointment Import**: Foundation UI for CSV/Excel upload from existing HMS
+### 1. 📋 Real-Time Reception Queue Controls
+- **Check-In**: Turn `BOOKED` patients into `WAITING` with automatic entry into FIFO queue with timestamp.
+- **Predictable FIFO Queue**: Next patient is strictly determined by arrival/check-in order.
+- **CALL NEXT**: Calls the next waiting patient, sets status to `CALLED`, assigns them to the consultation room, and broadcasts instant real-time updates to all connected screens.
+- **Consultation Workflow**:
+  - `START CONSULTATION` $\rightarrow$ `IN_CONSULTATION`
+  - `COMPLETE CONSULTATION` $\rightarrow$ `COMPLETED` (clears room, ready for next patient)
+- **Skip & No-Show**: Moves patients out of the active queue while retaining their historical records in the database.
+- **Doctor Delay Toggle**: One-click delay status switch (`Available` $\leftrightarrow$ `DOCTOR DELAYED`).
 
-### 2. 📱 Patient Tracking Page (Mobile Friendly)
-- Clean public tracker interface with simulated phone frame mockup option
-- Token search: Enter `A07` (or click quick token chips)
-- Live details:
-  - **YOUR TOKEN**: `A07`
-  - **YOUR STATUS**: `WAITING`
-  - **NOW SERVING**: `A05` (`Sneha Rao`)
-  - **PATIENTS AHEAD**: `1`
-  - **Doctor**: `Dr. Kumar`
-  - **Room**: `Room 2`
-  - **Guidance Message**: *"Please remain in the waiting area. You will be called when it is your turn."*
+### 2. 📱 Live Patient Tracking Page
+- Calculates exact **`PATIENTS AHEAD`** position in real-time from the database.
+- **Token Called Banner**: When called, shows prominent announcement:
+  > **YOUR TOKEN HAS BEEN CALLED**  
+  > Please proceed to: **Dr. Kumar — Room 2**
+- **Doctor Delay Alert**: Displays notice when the doctor is delayed:
+  > **Dr. Kumar is currently delayed.**  
+  > Please remain in the waiting area.
 
 ### 3. 📺 Waiting-Room TV Display
-- Designed for large monitors and wall-mounted TV screens
-- High-contrast typography readable from across the room
-- **NOW SERVING**: Large `A05` token and `Sneha Rao` display
-- **NEXT**: Queue list with token badges and appointment times
-- Live real-time clock, date, and doctor status indicator
+- **Now Serving**: High-visibility hero banner for the current token & patient name.
+- **Next List**: Real-time waiting list ordered by queue arrival time.
+- **Doctor Delayed Banner**: Full-width notice displayed across the top when doctor delay is active.
+
+### 4. ⚡ Live Real-Time Synchronization (WebSockets)
+- Backend broadcasts real-time `QUEUE_UPDATED` events over WebSocket (`/ws`).
+- All open windows (Reception, TV Display, Patient Mobile Tracker) synchronize instantly with zero page reloads.
 
 ---
 
-## 🛠️ Tech Stack
+## 🧪 Automated End-to-End Verification Test
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Lucide Icons, Vite
-- **Backend**: Node.js, Express, TypeScript (REST API)
-- **Database**: PostgreSQL (Embedded WASM PGlite persistence with zero config + standard PostgreSQL server pool support)
+To run the complete automated test suite verifying all 10 steps of the Section 12 lifecycle:
+
+\`\`\`bash
+npm test
+\`\`\`
+
+**Verified Steps in Test Suite:**
+1. Reset to `ALL BOOKED`
+2. Check in `A05 (Sneha Rao)` $\rightarrow$ `WAITING`
+3. Check in `A06 (Arjun Patel)` $\rightarrow$ `WAITING`
+4. Check in `A07 (Meena Das)` $\rightarrow$ `WAITING`
+5. Verify `A07` tracking $\rightarrow$ `PATIENTS AHEAD = 2`
+6. Click `CALL NEXT` $\rightarrow$ `A05` becomes `CALLED`; `A07` tracking $\rightarrow$ `PATIENTS AHEAD = 1`
+7. `START CONSULTATION` $\rightarrow$ `A05` becomes `IN_CONSULTATION`
+8. `COMPLETE CONSULTATION` $\rightarrow$ `A05` becomes `COMPLETED`
+9. Click `CALL NEXT` $\rightarrow$ `A06` becomes `CALLED`; `A07` tracking $\rightarrow$ `NOW SERVING = A06`, `PATIENTS AHEAD = 0`
+10. Click `CALL NEXT` $\rightarrow$ `A07` becomes `CALLED`; `A07` tracking $\rightarrow$ `CALLED` banner
+11. Toggle Doctor Delay $\rightarrow$ `DOCTOR DELAYED` alert on all screens
+12. 11+ real-time WebSocket broadcasts delivered without errors.
 
 ---
 
-## ⚡ Quick Start
+## 🚀 Quick Start
 
-### 1. Install Dependencies
-\`\`\`bash
-npm install
-cd client && npm install && cd ..
-\`\`\`
-
-### 2. Seed Demo Database
-\`\`\`bash
-npm run seed
-\`\`\`
-
-### 3. Start Both Backend & Frontend
+### 1. Start Server & Client
 \`\`\`bash
 npm run dev
 \`\`\`
 
 - **Frontend Application**: [http://localhost:3000](http://localhost:3000)
-- **Backend REST API**: [http://localhost:5001](http://localhost:5001)
-- **API Health Check**: [http://localhost:5001/health](http://localhost:5001/health)
-- **Queue Overview API**: [http://localhost:5001/api/queue/overview](http://localhost:5001/api/queue/overview)
+- **Backend API & WebSockets**: [http://localhost:5001](http://localhost:5001)
 
----
-
-## 📊 Database Schema
-
-### `doctors`
-- `id` (VARCHAR PK)
-- `name` (VARCHAR)
-- `room` (VARCHAR)
-- `delay_status` (VARCHAR)
-- `created_at` (TIMESTAMP)
-
-### `patients`
-- `id` (SERIAL PK)
-- `token` (VARCHAR UNIQUE)
-- `patient_name` (VARCHAR)
-- `phone` (VARCHAR)
-- `doctor_id` (VARCHAR FK)
-- `appointment_time` (VARCHAR)
-- `status` (ENUM: `BOOKED`, `CHECKED_IN`, `WAITING`, `CALLED`, `IN_CONSULTATION`, `COMPLETED`, `SKIPPED`, `NO_SHOW`)
-- `created_at`, `updated_at` (TIMESTAMP)
-
-### `queues`
-- `id` (SERIAL PK)
-- `doctor_id` (VARCHAR FK)
-- `current_patient_id` (INTEGER FK)
-- `queue_date` (DATE)
-- `queue_state` (VARCHAR)
-- `created_at`, `updated_at` (TIMESTAMP)
+### 2. Multi-Window Live Demo Setup:
+- **Window 1**: Open [http://localhost:3000](http://localhost:3000) on **Reception Dashboard**
+- **Window 2**: Open [http://localhost:3000](http://localhost:3000) on **Waiting TV Display**
+- **Window 3**: Open [http://localhost:3000](http://localhost:3000) on **Patient Tracking** (enter `A07`)
+- Perform actions on Reception (Check In, Call Next, Start Consultation, Complete Consultation, Delay) and watch all 3 screens update in real-time!

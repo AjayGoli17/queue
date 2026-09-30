@@ -13,6 +13,7 @@ export interface QueryResult<T = any> {
 
 export interface IDatabaseClient {
   query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>>;
+  exec(sql: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -33,6 +34,10 @@ class PGliteAdapter implements IDatabaseClient {
     };
   }
 
+  async exec(sql: string): Promise<void> {
+    await this.pglite.exec(sql);
+  }
+
   async close(): Promise<void> {
     await this.pglite.close();
   }
@@ -51,6 +56,10 @@ class PgPoolAdapter implements IDatabaseClient {
       rows: res.rows as T[],
       rowCount: res.rowCount ?? 0,
     };
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.pool.query(sql);
   }
 
   async close(): Promise<void> {
@@ -98,15 +107,7 @@ export async function initDatabase(): Promise<void> {
   const schemaPath = path.resolve(__dirname, '../models/schema.sql');
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
-    // Run schema commands
-    const statements = schemaSql
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    for (const stmt of statements) {
-      await db.query(stmt);
-    }
+    await db.exec(schemaSql);
     console.log('Database tables & schema initialized successfully.');
   }
 }

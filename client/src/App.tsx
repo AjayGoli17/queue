@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { QueueOverview } from './types';
 import { fetchQueueOverview, resetDemoData } from './services/api';
+import { wsClient } from './services/websocket';
 import { Navigation } from './components/Navigation';
 import { ReceptionDashboard } from './components/ReceptionDashboard';
 import { PatientTrackingPage } from './components/PatientTrackingPage';
@@ -14,7 +15,7 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async (silent = false) => {
+  const loadData = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
       const data = await fetchQueueOverview('dr-kumar');
@@ -27,16 +28,24 @@ export function App() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, []);
 
+  // 1. Initial Load & Background polling safeguard (every 5 seconds)
   useEffect(() => {
     loadData();
-    // 4-second gentle polling to maintain live sync across all three screens
     const interval = setInterval(() => {
       loadData(true);
-    }, 4000);
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadData]);
+
+  // 2. Real-Time WebSocket Synchronization (Instant updates on any queue action)
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribe(() => {
+      loadData(true);
+    });
+    return unsubscribe;
+  }, [loadData]);
 
   const handleResetDemo = async (mode: 'active_demo' | 'all_booked') => {
     setIsRefreshing(true);

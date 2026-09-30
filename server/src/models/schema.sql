@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS patients (
     doctor_id VARCHAR(50) REFERENCES doctors(id) ON DELETE SET NULL,
     appointment_time VARCHAR(30) NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'BOOKED',
+    is_walk_in BOOLEAN DEFAULT FALSE,
+    checked_in_at TIMESTAMP,
+    called_at TIMESTAMP,
+    completed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -42,4 +46,5 @@ CREATE TABLE IF NOT EXISTS queues (
 CREATE INDEX IF NOT EXISTS idx_patients_token ON patients(token);
 CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status);
 CREATE INDEX IF NOT EXISTS idx_patients_doctor ON patients(doctor_id);
+CREATE INDEX IF NOT EXISTS idx_patients_checked_in_at ON patients(checked_in_at);
 CREATE INDEX IF NOT EXISTS idx_queues_doctor ON queues(doctor_id);

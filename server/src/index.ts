@@ -1,13 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import http from 'http';
 import apiRoutes from './routes/api.js';
 import { initDatabase } from './config/database.js';
 import { seedDatabase } from './seed/seedData.js';
+import { wsService } from './services/websocketService.js';
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
 // Middleware
@@ -32,10 +35,14 @@ async function startServer() {
     console.log('Checking & seeding demo data...');
     await seedDatabase('active_demo');
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Hospital Queue API Server running at http://localhost:${PORT}`);
+    // Attach WebSocket server for real-time synchronization
+    wsService.init(server);
+
+    server.listen(PORT, () => {
+      console.log(`🚀 Hospital Queue API & Realtime Server running at http://localhost:${PORT}`);
       console.log(`👉 Health check: http://localhost:${PORT}/health`);
       console.log(`👉 Queue overview: http://localhost:${PORT}/api/queue/overview`);
+      console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}/ws`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

@@ -8,20 +8,23 @@
     "server": "tsx watch server/src/index.ts",
     "client": "npm run dev --prefix client",
     "build": "npm run build --prefix client",
-    "seed": "tsx server/src/seed/seedData.ts"
+    "seed": "tsx server/src/seed/seedData.ts",
+    "test": "tsx server/src/test_workflow.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "pg": "^8.13.3"
+    "pg": "^8.13.3",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.9",
     "@types/pg": "^8.11.11",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.1.2",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3"

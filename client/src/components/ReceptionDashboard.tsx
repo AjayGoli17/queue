@@ -18,8 +18,18 @@ import {
   CalendarCheck,
   CheckCircle2,
   Hourglass,
+  Check,
 } from 'lucide-react';
-import { updatePatientStatus, updateDoctorStatus } from '../services/api';
+import {
+  checkInPatient,
+  callNextPatient,
+  startConsultation,
+  completeConsultation,
+  skipPatient,
+  noShowPatient,
+  updateDoctorStatus,
+  updatePatientStatus,
+} from '../services/api';
 
 interface ReceptionDashboardProps {
   overview: QueueOverview;
@@ -35,45 +45,73 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
 
   const showToast = (msg: string) => {
     setActionFeedback(msg);
-    setTimeout(() => setActionFeedback(null), 3000);
+    setTimeout(() => setActionFeedback(null), 3500);
   };
 
-  const handleAction = async (action: 'CALL_NEXT' | 'DELAY' | 'SKIP' | 'NO_SHOW') => {
+  // 1. Check In Patient
+  const handleCheckIn = async (patientId: number, token: string, name: string) => {
     setIsUpdating(true);
     try {
-      if (action === 'CALL_NEXT') {
-        if (next_patients.length > 0) {
-          const nextPatient = next_patients[0];
-          // If there is currently a patient in consultation, complete them
-          if (current_patient) {
-            await updatePatientStatus(current_patient.id, 'COMPLETED');
-          }
-          await updatePatientStatus(nextPatient.id, 'IN_CONSULTATION');
-          showToast(`Called Next: ${nextPatient.token} — ${nextPatient.patient_name}`);
-        } else {
-          showToast('No more waiting patients in queue');
-        }
-      } else if (action === 'DELAY') {
-        const nextStatus = doctor.delay_status === 'Delayed 15m' ? 'Available' : 'Delayed 15m';
-        await updateDoctorStatus(doctor.id, nextStatus);
-        showToast(`Doctor status updated: ${nextStatus}`);
-      } else if (action === 'SKIP') {
-        if (current_patient) {
-          await updatePatientStatus(current_patient.id, 'SKIPPED');
-          showToast(`Marked ${current_patient.token} as SKIPPED`);
-        } else if (next_patients.length > 0) {
-          await updatePatientStatus(next_patients[0].id, 'SKIPPED');
-          showToast(`Skipped ${next_patients[0].token}`);
-        }
-      } else if (action === 'NO_SHOW') {
-        if (current_patient) {
-          await updatePatientStatus(current_patient.id, 'NO_SHOW');
-          showToast(`Marked ${current_patient.token} as NO SHOW`);
-        } else if (next_patients.length > 0) {
-          await updatePatientStatus(next_patients[0].id, 'NO_SHOW');
-          showToast(`Marked ${next_patients[0].token} as NO SHOW`);
-        }
+      await checkInPatient(patientId);
+      showToast(`Checked In: ${token} — ${name} (Added to Waiting Queue)`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error checking in: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // 2. CALL NEXT
+  const handleCallNext = async () => {
+    setIsUpdating(true);
+    try {
+      const res = await callNextPatient(doctor.id);
+      if (res.patient) {
+        showToast(`🔔 CALLED NEXT: ${res.patient.token} — ${res.patient.patient_name}`);
       }
+      onRefresh();
+    } catch (err: any) {
+      showToast(err.message || 'No patients are currently waiting.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // 3. START CONSULTATION
+  const handleStartConsultation = async (patientId: number, token: string) => {
+    setIsUpdating(true);
+    try {
+      await startConsultation(patientId);
+      showToast(`Consultation Started: ${token}`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error starting consultation: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // 4. COMPLETE CONSULTATION
+  const handleCompleteConsultation = async (patientId: number, token: string) => {
+    setIsUpdating(true);
+    try {
+      await completeConsultation(patientId);
+      showToast(`Consultation Completed: ${token}`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error completing consultation: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // 5. SKIP
+  const handleSkip = async (patientId: number, token: string) => {
+    setIsUpdating(true);
+    try {
+      await skipPatient(patientId);
+      showToast(`Marked ${token} as SKIPPED`);
       onRefresh();
     } catch (err: any) {
       showToast(`Error: ${err.message}`);
@@ -82,19 +120,56 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
     }
   };
 
-  const handlePatientStatusChange = async (patientId: number, newStatus: PatientStatus) => {
+  // 6. NO SHOW
+  const handleNoShow = async (patientId: number, token: string) => {
+    setIsUpdating(true);
     try {
-      await updatePatientStatus(patientId, newStatus);
-      showToast(`Updated status to ${newStatus}`);
+      await noShowPatient(patientId);
+      showToast(`Marked ${token} as NO SHOW`);
       onRefresh();
     } catch (err: any) {
-      showToast(`Error updating status: ${err.message}`);
+      showToast(`Error: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
+  // 7. Toggle Doctor Delay
+  const handleToggleDoctorDelay = async () => {
+    setIsUpdating(true);
+    try {
+      const isCurrentlyDelayed = doctor.delay_status.toLowerCase().includes('delay');
+      const nextStatus = isCurrentlyDelayed ? 'Available' : 'Delayed 15m';
+      await updateDoctorStatus(doctor.id, nextStatus);
+      showToast(`Doctor status updated: ${nextStatus}`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error updating doctor status: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Re-queue helper
+  const handleRequeue = async (patientId: number, token: string) => {
+    setIsUpdating(true);
+    try {
+      await updatePatientStatus(patientId, 'WAITING');
+      showToast(`Re-queued: ${token} (Added back to waiting line)`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error re-queuing: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
+  const hasWaitingPatients = next_patients.length > 0;
+
   return (
     <div className="space-y-6 pb-12">
-      {/* Action Toast / Feedback Bar */}
+      {/* Toast Bar */}
       {actionFeedback && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <Sparkles className="w-4 h-4 text-hospital-400" />
@@ -129,25 +204,36 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             </div>
           </div>
 
-          {/* Doctor Status & Quick HMS CSV Import Button */}
+          {/* Doctor Status Toggle & HMS CSV Import Button */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl">
+            <button
+              onClick={handleToggleDoctorDelay}
+              disabled={isUpdating}
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border transition text-left shadow-sm ${
+                isDoctorDelayed
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
+                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
+              }`}
+              title="Click to toggle doctor delay status"
+            >
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Doctor Status
+                  Doctor Status (Click to Toggle)
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-0.5">
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
-                      doctor.delay_status.includes('Delay')
-                        ? 'bg-amber-500 animate-pulse'
-                        : 'bg-emerald-500'
+                      isDoctorDelayed
+                        ? 'bg-amber-500 animate-ping'
+                        : 'bg-emerald-500 animate-pulse'
                     }`}
                   />
-                  <span className="text-sm font-bold text-slate-800">{doctor.delay_status}</span>
+                  <span className="text-sm font-bold">
+                    {isDoctorDelayed ? 'DOCTOR DELAYED (15m)' : 'AVAILABLE'}
+                  </span>
                 </div>
               </div>
-            </div>
+            </button>
 
             <button
               onClick={() => setIsCsvModalOpen(true)}
@@ -186,11 +272,13 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700">In Consultation</span>
+            <span className="text-xs font-semibold text-emerald-700">In Consultation / Called</span>
             <UserCheck className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-emerald-700">{stats.in_consultation}</span>
+            <span className="text-2xl font-black text-emerald-700">
+              {stats.in_consultation + (current_patient?.status === 'CALLED' ? 1 : 0)}
+            </span>
             <span className="text-xs text-emerald-600">Active</span>
           </div>
         </div>
@@ -223,11 +311,11 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
       {/* CORE QUEUE MANAGEMENT ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* LEFT / CENTER: CURRENTLY SERVING & ACTION BUTTONS */}
+        {/* LEFT: CURRENTLY SERVING & ACTIVE ACTIONS (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           
           {/* CURRENTLY SERVING CARD */}
-          <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-6 shadow-md shadow-emerald-500/5 relative overflow-hidden">
+          <div className="bg-white rounded-2xl border-2 border-emerald-500/40 p-6 shadow-md shadow-emerald-500/5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/10 to-transparent rounded-bl-full pointer-events-none" />
             
             <div className="flex items-center justify-between mb-4">
@@ -266,56 +354,109 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                     <span>{current_patient.phone}</span>
                   </div>
                 </div>
+
+                {/* CONTEXTUAL ACTION BUTTONS FOR ACTIVE PATIENT */}
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                    Active Patient Actions
+                  </div>
+
+                  {current_patient.status === 'CALLED' && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => handleStartConsultation(current_patient.id, current_patient.token)}
+                        disabled={isUpdating}
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        <span>START CONSULTATION</span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleSkip(current_patient.id, current_patient.token)}
+                          disabled={isUpdating}
+                          className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                        >
+                          <SkipForward className="w-3.5 h-3.5 text-slate-600" />
+                          <span>SKIP</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleNoShow(current_patient.id, current_patient.token)}
+                          disabled={isUpdating}
+                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                        >
+                          <UserX className="w-3.5 h-3.5 text-rose-600" />
+                          <span>NO SHOW</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {current_patient.status === 'IN_CONSULTATION' && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => handleCompleteConsultation(current_patient.id, current_patient.token)}
+                        disabled={isUpdating}
+                        className="w-full py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-md shadow-teal-600/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>COMPLETE CONSULTATION</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleSkip(current_patient.id, current_patient.token)}
+                        disabled={isUpdating}
+                        className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                      >
+                        <SkipForward className="w-3.5 h-3.5 text-slate-500" />
+                        <span>End / Skip Consultation</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="py-8 text-center text-slate-400">
-                <p className="text-base font-semibold text-slate-600">No Patient In Consultation</p>
-                <p className="text-xs text-slate-400 mt-1">Click "CALL NEXT" below to call the next patient in queue.</p>
+                <p className="text-base font-semibold text-slate-600">No Patient In Room</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {hasWaitingPatients
+                    ? 'Click "CALL NEXT" below to call the next waiting patient.'
+                    : 'No patients are currently waiting in the queue.'}
+                </p>
               </div>
             )}
 
-            {/* ACTION BUTTONS (Section 6 & 12) */}
-            <div className="mt-6 pt-5 border-t border-slate-200/80">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
-                Queue Actions
+            {/* CALL NEXT BUTTON SECTION (Section 3) */}
+            <div className="mt-5 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Queue Calling Control
+                </span>
+                <span className="text-xs font-medium text-slate-500">
+                  {next_patients.length} Waiting
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => handleAction('CALL_NEXT')}
-                  disabled={isUpdating}
-                  className="col-span-2 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-hospital-600 hover:bg-hospital-700 active:bg-hospital-800 text-white font-bold text-sm shadow-md shadow-hospital-600/20 transition disabled:opacity-50"
-                >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>CALL NEXT</span>
-                </button>
 
-                <button
-                  onClick={() => handleAction('DELAY')}
-                  disabled={isUpdating}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold text-xs transition disabled:opacity-50"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>DELAY</span>
-                </button>
+              <button
+                onClick={handleCallNext}
+                disabled={isUpdating || !hasWaitingPatients}
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 shadow-md transition ${
+                  hasWaitingPatients
+                    ? 'bg-hospital-600 hover:bg-hospital-700 active:bg-hospital-800 text-white shadow-hospital-600/25'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                }`}
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>CALL NEXT PATIENT</span>
+              </button>
 
-                <button
-                  onClick={() => handleAction('SKIP')}
-                  disabled={isUpdating}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-bold text-xs transition disabled:opacity-50"
-                >
-                  <SkipForward className="w-3.5 h-3.5 text-slate-600" />
-                  <span>SKIP</span>
-                </button>
-
-                <button
-                  onClick={() => handleAction('NO_SHOW')}
-                  disabled={isUpdating}
-                  className="col-span-2 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs transition disabled:opacity-50"
-                >
-                  <UserX className="w-3.5 h-3.5 text-rose-600" />
-                  <span>NO SHOW</span>
-                </button>
-              </div>
+              {!hasWaitingPatients && (
+                <p className="text-[11px] text-slate-400 text-center mt-2 font-medium">
+                  No patients are currently waiting.
+                </p>
+              )}
             </div>
           </div>
 
@@ -342,16 +483,16 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
           </div>
         </div>
 
-        {/* RIGHT: NEXT PATIENTS QUEUE & ALL TODAY'S PATIENTS TABLE */}
+        {/* RIGHT: NEXT PATIENTS QUEUE & ALL TODAY'S APPOINTMENTS TABLE (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           
-          {/* NEXT PATIENTS SECTION */}
+          {/* NEXT PATIENTS SECTION (FIFO Queue) */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-hospital-600" />
                 <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
-                  NEXT PATIENTS
+                  NEXT PATIENTS (FIFO WAITING QUEUE)
                 </h3>
               </div>
               <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
@@ -361,7 +502,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
 
             {next_patients.length > 0 ? (
               <div className="space-y-2.5">
-                {next_patients.slice(0, 5).map((patient, index) => (
+                {next_patients.map((patient, index) => (
                   <div
                     key={patient.id}
                     className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition"
@@ -381,19 +522,36 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <Clock className="w-3 h-3 text-slate-400" />
                           <span>Appt: {patient.appointment_time}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <StatusBadge status={patient.status} size="sm" />
+                      {index === 0 && (
+                        <button
+                          onClick={handleCallNext}
+                          disabled={isUpdating}
+                          className="text-xs font-bold px-3 py-1 rounded-lg bg-hospital-600 text-white hover:bg-hospital-700 shadow-sm transition"
+                        >
+                          Call Next
+                        </button>
+                      )}
                       <button
-                        onClick={() => handlePatientStatusChange(patient.id, 'IN_CONSULTATION')}
-                        className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-hospital-50 text-hospital-700 hover:bg-hospital-100 border border-hospital-200 transition"
+                        onClick={() => handleSkip(patient.id, patient.token)}
+                        disabled={isUpdating}
+                        className="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
                       >
-                        Call
+                        Skip
+                      </button>
+                      <button
+                        onClick={() => handleNoShow(patient.id, patient.token)}
+                        disabled={isUpdating}
+                        className="text-xs font-semibold px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition"
+                      >
+                        No Show
                       </button>
                     </div>
                   </div>
@@ -401,12 +559,13 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
               </div>
             ) : (
               <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                <p className="text-sm font-medium">No patients currently in the waiting line.</p>
+                <p className="text-sm font-medium">No patients are currently waiting.</p>
+                <p className="text-xs text-slate-400 mt-1">Check in BOOKED patients from the table below to add them to the waiting queue.</p>
               </div>
             )}
           </div>
 
-          {/* ALL TODAY'S APPOINTMENTS TABLE */}
+          {/* ALL TODAY'S APPOINTMENTS TABLE (A01 - A10) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
               <div>
@@ -414,7 +573,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                   Today's HMS Appointments (A01 - A10)
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">
-                  Synchronized with Doctor Kumar's Schedule
+                  Source of Truth from Hospital HMS • Click Check In when patient arrives
                 </p>
               </div>
               <span className="text-xs font-mono font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-700">
@@ -430,7 +589,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                     <th className="px-4 py-3">Patient Name</th>
                     <th className="px-4 py-3">Appt Time</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Quick Action</th>
+                    <th className="px-4 py-3 text-right">Queue Control</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -457,34 +616,56 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* 1. BOOKED PATIENT -> CHECK IN */}
                             {p.status === 'BOOKED' && (
                               <button
-                                onClick={() => handlePatientStatusChange(p.id, 'WAITING')}
-                                className="text-[11px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                                onClick={() => handleCheckIn(p.id, p.token, p.patient_name)}
+                                disabled={isUpdating}
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-hospital-600 hover:bg-hospital-700 text-white shadow-sm transition"
                               >
-                                Check In
+                                CHECK IN
                               </button>
                             )}
+
+                            {/* 2. WAITING PATIENT */}
                             {p.status === 'WAITING' && (
                               <button
-                                onClick={() => handlePatientStatusChange(p.id, 'IN_CONSULTATION')}
-                                className="text-[11px] font-bold px-2 py-1 rounded bg-hospital-100 hover:bg-hospital-200 text-hospital-800 transition"
+                                onClick={handleCallNext}
+                                disabled={isUpdating}
+                                className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-hospital-50 hover:bg-hospital-100 text-hospital-800 border border-hospital-200 transition"
                               >
-                                Call
+                                Call Next
                               </button>
                             )}
+
+                            {/* 3. CALLED PATIENT */}
+                            {p.status === 'CALLED' && (
+                              <button
+                                onClick={() => handleStartConsultation(p.id, p.token)}
+                                disabled={isUpdating}
+                                className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
+                              >
+                                Start Consultation
+                              </button>
+                            )}
+
+                            {/* 4. IN CONSULTATION */}
                             {p.status === 'IN_CONSULTATION' && (
                               <button
-                                onClick={() => handlePatientStatusChange(p.id, 'COMPLETED')}
-                                className="text-[11px] font-bold px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 transition"
+                                onClick={() => handleCompleteConsultation(p.id, p.token)}
+                                disabled={isUpdating}
+                                className="text-xs font-bold px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
                               >
                                 Complete
                               </button>
                             )}
+
+                            {/* 5. COMPLETED / SKIPPED / NO SHOW -> RE-QUEUE OPTION */}
                             {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
                               <button
-                                onClick={() => handlePatientStatusChange(p.id, 'WAITING')}
-                                className="text-[11px] font-medium text-slate-400 hover:text-slate-600 transition"
+                                onClick={() => handleRequeue(p.id, p.token)}
+                                disabled={isUpdating}
+                                className="text-[11px] font-medium text-slate-500 hover:text-slate-800 underline transition"
                               >
                                 Re-queue
                               </button>
