@@ -33,6 +33,7 @@ import {
   skipPatient,
   noShowPatient,
   updateDoctorStatus,
+  updateDoctorAvgConsultationTime,
   updatePatientStatus,
 } from '../services/api';
 
@@ -173,6 +174,20 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
     }
   };
 
+  // 8. Update Average Consultation Time
+  const handleConsultationTimeChange = async (minutes: number) => {
+    setIsUpdating(true);
+    try {
+      await updateDoctorAvgConsultationTime(doctor.id, minutes);
+      showToast(`Average consultation time updated to ${minutes} min`);
+      onRefresh();
+    } catch (err: any) {
+      showToast(`Error updating consultation time: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
   const hasWaitingPatients = next_patients.length > 0;
 
@@ -226,9 +241,31 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
             </div>
           </div>
 
-          {/* Action Toolbar: + Walk-In, Import CSV, Doctor Delay Toggle */}
+          {/* Action Toolbar: + Walk-In, Import CSV, Doctor Delay Toggle, Avg Consultation Time */}
           <div className="flex flex-wrap items-center gap-3">
             
+            {/* Average Consultation Time Setting */}
+            <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl shadow-sm">
+              <Clock className="w-4 h-4 text-hospital-600 shrink-0" />
+              <div className="flex flex-col">
+                <label htmlFor="avg-consultation-time" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Avg Consultation Time
+                </label>
+                <select
+                  id="avg-consultation-time"
+                  value={doctor.avg_consultation_time || 15}
+                  onChange={(e) => handleConsultationTimeChange(Number(e.target.value))}
+                  disabled={isUpdating}
+                  className="text-xs sm:text-sm font-bold text-slate-800 bg-transparent border-0 p-0 pr-1 focus:ring-0 cursor-pointer font-sans outline-none"
+                >
+                  <option value={10}>10 minutes</option>
+                  <option value={15}>15 minutes (Default)</option>
+                  <option value={20}>20 minutes</option>
+                  <option value={30}>30 minutes</option>
+                </select>
+              </div>
+            </div>
+
             {/* + WALK-IN PATIENT BUTTON (Section 3) */}
             <button
               onClick={() => setIsWalkInModalOpen(true)}

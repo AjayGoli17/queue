@@ -222,6 +222,22 @@ router.patch('/doctors/:id/delay', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/doctors/:id/consultation-time
+router.patch('/doctors/:id/consultation-time', async (req: Request, res: Response) => {
+  try {
+    const doctorId = req.params.id;
+    const { avg_consultation_time } = req.body;
+    if (typeof avg_consultation_time !== 'number' || avg_consultation_time <= 0) {
+      return res.status(400).json({ error: 'Valid avg_consultation_time number is required.' });
+    }
+    const updated = await QueueService.updateDoctorAvgConsultationTime(doctorId, avg_consultation_time);
+    wsService.broadcastQueueUpdate(doctorId);
+    return res.json(updated);
+  } catch (error: any) {
+    return res.status(500).json({ error: 'Failed to update doctor consultation time.' });
+  }
+});
+
 // POST /api/demo/reset
 router.post('/demo/reset', async (req: Request, res: Response) => {
   try {

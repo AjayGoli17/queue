@@ -93,12 +93,21 @@ export async function getDatabase(): Promise<IDatabaseClient> {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  console.log(`Initializing Embedded PostgreSQL database in ${dataDir}...`);
-  const pglite = new PGlite(dataDir);
-  dbClient = new PGliteAdapter(pglite);
-  console.log('Embedded PostgreSQL engine initialized.');
-
-  return dbClient;
+  try {
+    console.log(`Initializing Embedded PostgreSQL database in ${dataDir}...`);
+    const pglite = new PGlite(dataDir);
+    await pglite.waitReady;
+    dbClient = new PGliteAdapter(pglite);
+    console.log('Embedded PostgreSQL engine initialized with persistence.');
+    return dbClient;
+  } catch (err) {
+    console.warn('Persistent PGlite init failed, initializing in-memory PGlite:', err);
+    const pglite = new PGlite();
+    await pglite.waitReady;
+    dbClient = new PGliteAdapter(pglite);
+    console.log('In-memory Embedded PostgreSQL engine initialized.');
+    return dbClient;
+  }
 }
 
 export async function initDatabase(): Promise<void> {

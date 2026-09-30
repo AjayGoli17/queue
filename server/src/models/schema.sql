@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS doctors (
     name VARCHAR(100) NOT NULL,
     room VARCHAR(50) NOT NULL,
     delay_status VARCHAR(50) DEFAULT 'Available',
+    avg_consultation_time INTEGER DEFAULT 15,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

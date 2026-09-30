@@ -56,11 +56,35 @@ async function runTests() {
   console.log('A07 Checked in:', d3.patient.status);
   console.assert(d3.patient.status === 'WAITING', 'A07 must be WAITING');
 
-  // STEP 4: Open Patient Tracking for A07 -> Should show PATIENTS AHEAD = 2
-  console.log('\n--- Step 4: Patient Tracking for A07 ---');
+  // STEP 4: Open Patient Tracking for A07 -> Verify Scheduled Appointment Time & Estimated Wait Time
+  console.log('\n--- Step 4: Patient Tracking for A07 (Scheduled Appointment & Estimated Wait) ---');
   const trackA07_1 = await (await fetch(`${BASE}/queue/patient/A07`)).json();
-  console.log(`A07 Status: ${trackA07_1.status}, Patients Ahead: ${trackA07_1.patients_ahead}`);
+  console.log(`A07 Token: ${trackA07_1.token}, Appt Time: ${trackA07_1.appointment_time}, Status: ${trackA07_1.status}`);
+  console.log(`Patients Ahead: ${trackA07_1.patients_ahead}, Avg Consultation Time: ${trackA07_1.avg_consultation_time}m`);
+  console.log(`Estimated Wait Minutes: ${trackA07_1.estimated_wait_minutes}, Text: "${trackA07_1.estimated_wait_text}"`);
+  console.assert(trackA07_1.appointment_time === '11:30 AM', `Expected '11:30 AM', got ${trackA07_1.appointment_time}`);
   console.assert(trackA07_1.patients_ahead === 2, `Expected 2 patients ahead, got ${trackA07_1.patients_ahead}`);
+  console.assert(trackA07_1.estimated_wait_minutes === 30, `Expected 30 min estimated wait, got ${trackA07_1.estimated_wait_minutes}`);
+  console.assert(trackA07_1.estimated_wait_text.includes('30'), `Expected ~30 minutes, got "${trackA07_1.estimated_wait_text}"`);
+
+  // Test updating Average Consultation Time (e.g. 15 -> 20 min)
+  console.log('\n--- Step 4b: Update Avg Consultation Time to 20 minutes ---');
+  await fetch(`${BASE}/doctors/dr-kumar/consultation-time`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avg_consultation_time: 20 }),
+  });
+  const trackA07_customAvg = await (await fetch(`${BASE}/queue/patient/A07`)).json();
+  console.log(`A07 with 20m avg -> Patients Ahead: ${trackA07_customAvg.patients_ahead}, Estimated Wait: ${trackA07_customAvg.estimated_wait_minutes}m ("${trackA07_customAvg.estimated_wait_text}")`);
+  console.assert(trackA07_customAvg.avg_consultation_time === 20, 'Avg consultation time should be 20');
+  console.assert(trackA07_customAvg.estimated_wait_minutes === 40, `Expected 40 min wait (2 * 20), got ${trackA07_customAvg.estimated_wait_minutes}`);
+
+  // Revert back to 15 min default
+  await fetch(`${BASE}/doctors/dr-kumar/consultation-time`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avg_consultation_time: 15 }),
+  });
 
   // STEP 5: CALL NEXT -> A05 becomes CALLED
   console.log('\n--- Step 5: CALL NEXT (A05) ---');
@@ -69,10 +93,15 @@ async function runTests() {
   console.assert(call1.patient.token === 'A05', 'A05 must be called');
   console.assert(call1.patient.status === 'CALLED', 'A05 must have status CALLED');
 
+  const trackA05_called = await (await fetch(`${BASE}/queue/patient/A05`)).json();
+  console.log(`A05 Called Tracking: status=${trackA05_called.status}, message="${trackA05_called.message}"`);
+  console.assert(trackA05_called.status === 'CALLED', 'A05 tracking status must be CALLED');
+
   const trackA07_2 = await (await fetch(`${BASE}/queue/patient/A07`)).json();
-  console.log(`A07 Now Serving: ${trackA07_2.current_serving_token}, Patients Ahead: ${trackA07_2.patients_ahead}`);
+  console.log(`A07 Now Serving: ${trackA07_2.current_serving_token}, Patients Ahead: ${trackA07_2.patients_ahead}, Wait: ${trackA07_2.estimated_wait_minutes}m`);
   console.assert(trackA07_2.current_serving_token === 'A05', 'Now serving should be A05');
   console.assert(trackA07_2.patients_ahead === 1, `Expected 1 patient ahead, got ${trackA07_2.patients_ahead}`);
+  console.assert(trackA07_2.estimated_wait_minutes === 15, `Expected 15 min wait, got ${trackA07_2.estimated_wait_minutes}`);
 
   // STEP 6: START CONSULTATION on A05
   console.log('\n--- Step 6: START CONSULTATION (A05) ---');
@@ -93,12 +122,13 @@ async function runTests() {
   console.assert(call2.patient.token === 'A06', 'A06 must be called');
 
   const trackA07_3 = await (await fetch(`${BASE}/queue/patient/A07`)).json();
-  console.log(`A07 Now Serving: ${trackA07_3.current_serving_token}, Patients Ahead: ${trackA07_3.patients_ahead}`);
+  console.log(`A07 Now Serving: ${trackA07_3.current_serving_token}, Patients Ahead: ${trackA07_3.patients_ahead}, Estimated Wait: "${trackA07_3.estimated_wait_text}"`);
   console.assert(trackA07_3.current_serving_token === 'A06', 'Now serving should be A06');
   console.assert(trackA07_3.patients_ahead === 0, `Expected 0 patients ahead, got ${trackA07_3.patients_ahead}`);
+  console.assert(trackA07_3.estimated_wait_text === "You're next", `Expected "You're next", got "${trackA07_3.estimated_wait_text}"`);
 
-  // STEP 9: TEST WALK-IN PATIENT REGISTRATION (Section 3)
-  console.log('\n--- Step 9: Test Walk-In Patient Registration ---');
+  // STEP 9: TEST WALK-IN PATIENT REGISTRATION (Section 3 & Appointment Time = 'Walk-in')
+  console.log('\n--- Step 9: Test Walk-In Patient Registration & Appointment Time Display ---');
   const walkInRes = await fetch(`${BASE}/queue/walk-in`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -108,6 +138,11 @@ async function runTests() {
   console.log(`Registered Walk-In: ${walkInData.patient.token} — ${walkInData.patient.patient_name}, Status: ${walkInData.patient.status}, is_walk_in: ${walkInData.patient.is_walk_in}`);
   console.assert(walkInData.patient.token === 'A11', `Expected token A11, got ${walkInData.patient.token}`);
   console.assert(walkInData.patient.status === 'WAITING', 'Walk-in patient must be WAITING');
+
+  const trackWalkIn = await (await fetch(`${BASE}/queue/patient/A11`)).json();
+  console.log(`Walk-in A11 Appt Time Display: "${trackWalkIn.appointment_time}", is_walk_in: ${trackWalkIn.is_walk_in}`);
+  console.assert(trackWalkIn.appointment_time === 'Walk-in', `Expected 'Walk-in', got ${trackWalkIn.appointment_time}`);
+  console.assert(trackWalkIn.is_walk_in === true, 'is_walk_in must be true');
 
   // STEP 10: TEST CSV APPOINTMENT IMPORT (Section 2)
   console.log('\n--- Step 10: Test CSV Appointment Import ---');

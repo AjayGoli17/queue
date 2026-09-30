@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import type { PatientTrackingInfo } from '../types';
 import { fetchPatientTracking } from '../services/api';
 import { wsClient } from '../services/websocket';
@@ -13,7 +14,7 @@ import {
   RotateCw,
   BellRing,
   AlertTriangle,
-  CheckCircle2,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface PatientTrackingPageProps {
@@ -21,8 +22,13 @@ interface PatientTrackingPageProps {
 }
 
 export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initialToken = 'A07' }) => {
-  const [tokenInput, setTokenInput] = useState<string>(initialToken);
-  const [activeToken, setActiveToken] = useState<string>(initialToken);
+  const { token: urlToken } = useParams<{ token?: string }>();
+  const navigate = useNavigate();
+
+  const currentTargetToken = (urlToken || initialToken).trim().toUpperCase();
+
+  const [tokenInput, setTokenInput] = useState<string>(currentTargetToken);
+  const [activeToken, setActiveToken] = useState<string>(currentTargetToken);
   const [trackingData, setTrackingData] = useState<PatientTrackingInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,17 +49,25 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
       const data = await fetchPatientTracking(query);
       setTrackingData(data);
       setActiveToken(query);
+      setTokenInput(query);
+      if (urlToken !== query) {
+        navigate(`/track/${query}`, { replace: true });
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Token not found. Please check your token number.');
+      setErrorMessage(err.message || `Token "${query}" not found. Please check your token number.`);
       setTrackingData(null);
+      setActiveToken(query);
+      setTokenInput(query);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    handleSearch(initialToken);
-  }, []);
+    if (currentTargetToken) {
+      handleSearch(currentTargetToken);
+    }
+  }, [urlToken]);
 
   // Real-time WebSocket subscription: Automatically re-fetches tracking when queue updates
   useEffect(() => {
@@ -74,14 +88,23 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
   const content = (
     <div className="w-full max-w-md mx-auto space-y-5">
       
-      {/* Header with Hospital Branding */}
-      <div className="text-center space-y-1">
+      {/* Header with Hospital Branding & Back Link */}
+      <div className="text-center space-y-1 relative">
+        <Link
+          to="/"
+          className="absolute left-0 top-1 text-slate-400 hover:text-slate-600 p-1 rounded-lg text-xs flex items-center gap-1 font-semibold transition"
+          title="Back to Launcher"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="hidden sm:inline">Home</span>
+        </Link>
+
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-hospital-600 text-white shadow-lg shadow-hospital-600/20 mb-1">
           <Building2 className="w-6 h-6" />
         </div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
           City Care Hospital
-        </h2>
+        </h1>
         <p className="text-xs font-semibold uppercase tracking-wider text-hospital-700">
           Live Patient Queue Tracker
         </p>
@@ -130,7 +153,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                   handleSearch(t);
                 }}
                 className={`px-2 py-0.5 rounded-md font-mono text-xs font-bold transition ${
-                  tokenInput === t
+                  activeToken === t
                     ? 'bg-hospital-600 text-white'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
@@ -153,7 +176,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
       {trackingData && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-md shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
           
-          {/* 1. SPECIAL "CALLED" BANNER (Section 6) */}
+          {/* 1. SPECIAL "CALLED" BANNER */}
           {isCalled && (
             <div className="p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center space-y-2 animate-bounce">
               <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full">
@@ -161,7 +184,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                 <span>YOUR TOKEN HAS BEEN CALLED</span>
               </div>
               <p className="text-sm font-semibold">
-                Please proceed to:
+                Please proceed immediately to:
               </p>
               <div className="text-xl font-black bg-white text-slate-900 py-2 px-4 rounded-xl shadow-md inline-block">
                 {trackingData.doctor_name} — {trackingData.room}
@@ -169,13 +192,28 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
           )}
 
-          {/* 2. DOCTOR DELAY ALERT (Section 9) */}
+          {/* 2. IN CONSULTATION BANNER */}
+          {trackingData.status === 'IN_CONSULTATION' && (
+            <div className="p-4 bg-emerald-600 text-white text-center font-bold text-sm flex items-center justify-center gap-2">
+              <Stethoscope className="w-5 h-5 text-emerald-200" />
+              <span>You are currently in consultation with {trackingData.doctor_name} in {trackingData.room}</span>
+            </div>
+          )}
+
+          {/* 3. COMPLETED BANNER */}
+          {trackingData.status === 'COMPLETED' && (
+            <div className="p-4 bg-teal-600 text-white text-center font-bold text-sm flex items-center justify-center gap-2">
+              <span>✓ Consultation Completed — Thank you for visiting {trackingData.hospital_name}</span>
+            </div>
+          )}
+
+          {/* 4. DOCTOR DELAY ALERT */}
           {isDoctorDelayed && (
             <div className="p-4 bg-amber-500 text-amber-950 font-semibold text-xs flex items-start gap-2.5 border-b border-amber-600">
               <AlertTriangle className="w-4 h-4 text-amber-950 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">{trackingData.doctor_name} is currently delayed.</p>
-                <p className="text-[11px] opacity-90 mt-0.5">Please remain in the waiting area.</p>
+                <p className="text-[11px] opacity-90 mt-0.5">Approximately 15 minutes. Please remain comfortably in the waiting area.</p>
               </div>
             </div>
           )}
@@ -196,19 +234,57 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
 
             <div className="flex flex-col items-center gap-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                YOUR STATUS
+                CURRENT STATUS
               </span>
               <StatusBadge status={trackingData.status} size="lg" />
             </div>
           </div>
 
-          {/* Live Queue Comparison Numbers */}
-          <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/40">
+          {/* 4-Box Key Metrics Grid: Appointment Time, Estimated Wait, Now Serving, Patients Ahead */}
+          <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-b border-slate-100 bg-slate-50/50">
+            
+            {/* Box 1: Scheduled Appointment Time */}
             <div className="p-4 text-center">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                APPOINTMENT TIME
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono mt-1">
+                {trackingData.appointment_time || (trackingData.is_walk_in ? 'Walk-in' : '—')}
+              </div>
+              <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                {trackingData.is_walk_in ? 'Registered Walk-in' : 'Scheduled Slot'}
+              </div>
+            </div>
+
+            {/* Box 2: Estimated Waiting Time */}
+            <div className="p-4 text-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                ESTIMATED WAIT
+              </span>
+              <div className={`text-xl sm:text-2xl font-black font-mono mt-1 ${
+                trackingData.status === 'CALLED' || trackingData.status === 'IN_CONSULTATION'
+                  ? 'text-emerald-600'
+                  : trackingData.patients_ahead === 0
+                  ? 'text-hospital-600'
+                  : 'text-amber-600'
+              }`}>
+                {trackingData.estimated_wait_text || '—'}
+              </div>
+              <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                {trackingData.status === 'WAITING'
+                  ? `~${trackingData.avg_consultation_time || 15}m per patient`
+                  : trackingData.status === 'BOOKED'
+                  ? 'Check-in at desk'
+                  : 'Active in room'}
+              </div>
+            </div>
+
+            {/* Box 3: Now Serving */}
+            <div className="p-4 text-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                 NOW SERVING
               </span>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-600 font-mono mt-0.5">
+              <div className="text-xl sm:text-2xl font-black text-emerald-600 font-mono mt-1">
                 {trackingData.current_serving_token || '—'}
               </div>
               <div className="text-[11px] font-medium text-slate-500 truncate mt-0.5">
@@ -216,11 +292,12 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
               </div>
             </div>
 
+            {/* Box 4: Patients Ahead */}
             <div className="p-4 text-center">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                 PATIENTS AHEAD
               </span>
-              <div className="text-2xl sm:text-3xl font-black text-hospital-700 font-mono mt-0.5">
+              <div className="text-xl sm:text-2xl font-black text-hospital-700 font-mono mt-1">
                 {trackingData.patients_ahead}
               </div>
               <div className="text-[11px] font-medium text-slate-500 mt-0.5">
@@ -229,10 +306,11 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                   : trackingData.status === 'IN_CONSULTATION'
                   ? 'Currently in room'
                   : trackingData.patients_ahead === 0
-                  ? 'You are next in queue!'
-                  : `${trackingData.patients_ahead} ahead of you`}
+                  ? "You're next in queue!"
+                  : `${trackingData.patients_ahead} waiting ahead`}
               </div>
             </div>
+
           </div>
 
           {/* Doctor & Room Details */}
@@ -295,7 +373,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
       {/* Mobile Framing Switcher Bar */}
       <div className="flex items-center justify-between max-w-md mx-auto px-1">
         <span className="text-xs font-medium text-slate-500">
-          Public Patient Interface
+          Public Patient Tracking Route (<code className="font-mono font-bold">/track/{activeToken}</code>)
         </span>
         <button
           onClick={() => setMobileFrame(!mobileFrame)}

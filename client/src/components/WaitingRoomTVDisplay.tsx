@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import type { QueueOverview } from '../types';
 import {
   Building2,
@@ -7,6 +8,7 @@ import {
   Maximize2,
   Minimize2,
   AlertTriangle,
+  Home,
 } from 'lucide-react';
 
 interface WaitingRoomTVDisplayProps {
@@ -52,7 +54,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
   };
 
   return (
-    <div className="min-h-[85vh] bg-slate-950 text-white rounded-3xl p-6 sm:p-10 shadow-2xl flex flex-col justify-between border-4 border-slate-900 select-none overflow-hidden relative font-sans">
+    <div className="min-h-screen bg-slate-950 text-white p-6 sm:p-10 flex flex-col justify-between select-none overflow-hidden relative font-sans">
       
       {/* Background glow effects for TV display */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -125,14 +127,24 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
             </div>
           </div>
 
-          {/* Fullscreen Button */}
-          <button
-            onClick={toggleFullscreen}
-            className="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition"
-            title="Toggle Fullscreen"
-          >
-            {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-          </button>
+          {/* Home Link & Fullscreen Button */}
+          <div className="flex items-center gap-2">
+            <Link
+              to="/"
+              title="Return to Launcher"
+              className="p-3 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-2xl border border-slate-700 transition"
+            >
+              <Home className="w-5 h-5" />
+            </Link>
+
+            <button
+              onClick={toggleFullscreen}
+              className="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition"
+              title="Toggle Fullscreen"
+            >
+              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -146,7 +158,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
                 {doctor.name} — {doctor.room} • DOCTOR DELAYED
               </span>
               <p className="text-xs sm:text-sm font-medium text-amber-200/90">
-                Please remain in the waiting area. Consultations will resume shortly.
+                Approximately 15 minutes. Please remain in the waiting area. Consultations will resume shortly.
               </p>
             </div>
           </div>
@@ -157,7 +169,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
       )}
 
       {/* 2. MAIN TV CONTENT GRID */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 my-6 relative z-10 items-stretch">
+      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 my-6 relative z-10 items-stretch flex-1">
         
         {/* LEFT / CENTER: HERO NOW SERVING SECTION (7 cols) */}
         <div className="lg:col-span-7 bg-gradient-to-br from-slate-900/90 via-slate-900 to-slate-950 rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-2xl flex flex-col justify-between relative overflow-hidden">

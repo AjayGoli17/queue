@@ -56,8 +56,6 @@ export class QueueService {
     const skippedCount = allPatients.filter(p => p.status === 'SKIPPED').length;
     const noShowCount = allPatients.filter(p => p.status === 'NO_SHOW').length;
     const walkInsCount = allPatients.filter(p => p.is_walk_in).length;
-    
-    // Checked in count is all patients who have checked in today (WAITING, CALLED, IN_CONSULTATION, COMPLETED, SKIPPED)
     const checkedInCount = allPatients.filter(p => p.status !== 'BOOKED').length;
 
     // Calculate Average Waiting Time (in minutes)
@@ -72,7 +70,7 @@ export class QueueService {
         countedPatients++;
       }
     }
-    const avgWaitTime = countedPatients > 0 ? Math.round(totalWaitMinutes / countedPatients) : 12;
+    const avgWaitTime = countedPatients > 0 ? Math.round(totalWaitMinutes / countedPatients) : (doctor.avg_consultation_time || 15);
 
     const stats = {
       total: allPatients.length,
@@ -131,8 +129,10 @@ export class QueueService {
       name: 'Dr. Kumar',
       room: 'Room 2',
       delay_status: 'Available',
+      avg_consultation_time: 15,
     };
 
+    const avgConsultation = doctor.avg_consultation_time || 15;
     const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
 
     // Find Queue & Current Serving Patient
@@ -172,16 +172,33 @@ export class QueueService {
       }).length;
     }
 
-    // Patient messages matching Section 7 specs
+    // Calculate Estimated Waiting Time (Sections 2, 3, 4, 5, 6, 8)
+    let estimatedWaitMinutes: number | null = null;
+    let estimatedWaitText: string | null = null;
+
+    if (patient.status === 'WAITING') {
+      if (patientsAhead > 0) {
+        estimatedWaitMinutes = patientsAhead * avgConsultation;
+        estimatedWaitText = `~${estimatedWaitMinutes} minutes`;
+      } else {
+        estimatedWaitMinutes = 0;
+        estimatedWaitText = "You're next";
+      }
+    }
+
+    // Appointment time formatting: for walk-in patients, clearly say "Walk-in"
+    const displayAppointmentTime = patient.is_walk_in ? 'Walk-in' : (patient.appointment_time || 'Walk-in');
+
+    // Messages
     let message = 'Please remain in the waiting area. You will be called when it is your turn.';
     if (isDoctorDelayed) {
-      message = `${doctor.name} is currently delayed. Please remain in the waiting area.`;
+      message = `${doctor.name} is currently delayed (approximately 15 minutes). Please remain in the waiting area.`;
     } else if (patient.status === 'CALLED') {
-      message = `Your token has been called! Please proceed to ${doctor.name} — ${doctor.room}.`;
+      message = `YOUR TOKEN HAS BEEN CALLED! Please proceed to ${doctor.name} — ${doctor.room}.`;
     } else if (patient.status === 'IN_CONSULTATION') {
-      message = `Your consultation is currently in progress with ${doctor.name} in ${doctor.room}.`;
+      message = `You're in consultation with ${doctor.name} in ${doctor.room}.`;
     } else if (patient.status === 'COMPLETED') {
-      message = 'Consultation completed. Thank you for visiting City Care Hospital.';
+      message = 'Consultation Completed. Thank you for visiting City Care Hospital.';
     } else if (patient.status === 'BOOKED') {
       message = 'Your appointment is booked. Please check in with reception upon arrival.';
     } else if (patient.status === 'SKIPPED') {
@@ -195,11 +212,15 @@ export class QueueService {
       token: patient.token,
       patient_name: patient.patient_name,
       status: patient.status,
-      appointment_time: patient.appointment_time,
+      appointment_time: displayAppointmentTime,
+      is_walk_in: !!patient.is_walk_in,
       doctor_name: doctor.name,
       room: doctor.room,
       delay_status: doctor.delay_status,
       is_doctor_delayed: isDoctorDelayed,
+      avg_consultation_time: avgConsultation,
+      estimated_wait_text: estimatedWaitText,
+      estimated_wait_minutes: estimatedWaitMinutes,
       current_serving_token: currentServingPatient?.token || null,
       current_serving_name: currentServingPatient?.patient_name || null,
       current_serving_status: currentServingPatient?.status || null,
@@ -361,7 +382,7 @@ export class QueueService {
     return updated;
   }
 
-  // 7. WALK-IN PATIENT (Section 3)
+  // 7. WALK-IN PATIENT
   static async addWalkInPatient(
     patientName: string,
     phone: string = '',
@@ -386,20 +407,17 @@ export class QueueService {
     const nextTokenNumber = maxNum + 1;
     const newToken = `A${nextTokenNumber < 10 ? '0' + nextTokenNumber : nextTokenNumber}`;
 
-    const now = new Date();
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     const insertRes = await db.query<Patient>(
       `INSERT INTO patients (token, patient_name, phone, doctor_id, appointment_time, status, is_walk_in, checked_in_at)
-       VALUES ($1, $2, $3, $4, $5, 'WAITING', TRUE, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, 'Walk-in', 'WAITING', TRUE, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [newToken, patientName.trim(), phone.trim() || '+91 98765 00000', doctorId, `${timeString} (Walk-in)`]
+      [newToken, patientName.trim(), phone.trim() || '+91 98765 00000', doctorId]
     );
 
     return insertRes.rows[0];
   }
 
-  // 8. CSV APPOINTMENT IMPORT (Section 2)
+  // 8. CSV APPOINTMENT IMPORT
   static async importAppointments(
     rows: Array<{ patient_name: string; phone?: string; appointment_time: string; doctor_name?: string }>,
     doctorId: string = 'dr-kumar'
@@ -442,6 +460,26 @@ export class QueueService {
     return { count: imported.length, imported };
   }
 
+  // 9. Update Doctor Delay Status
+  static async updateDoctorStatus(doctorId: string, delayStatus: string): Promise<Doctor | null> {
+    const db = await getDatabase();
+    const res = await db.query<Doctor>(
+      'UPDATE doctors SET delay_status = $1 WHERE id = $2 RETURNING *',
+      [delayStatus, doctorId]
+    );
+    return res.rows[0] || null;
+  }
+
+  // 10. Update Doctor Average Consultation Time (Section 2 & 9)
+  static async updateDoctorAvgConsultationTime(doctorId: string, avgMinutes: number): Promise<Doctor | null> {
+    const db = await getDatabase();
+    const res = await db.query<Doctor>(
+      'UPDATE doctors SET avg_consultation_time = $1 WHERE id = $2 RETURNING *',
+      [avgMinutes, doctorId]
+    );
+    return res.rows[0] || null;
+  }
+
   // Generic update status
   static async updatePatientStatus(patientId: number, status: PatientStatus): Promise<Patient | null> {
     const db = await getDatabase();
@@ -480,15 +518,5 @@ export class QueueService {
     }
 
     return updatedPatient;
-  }
-
-  // Doctor status toggle
-  static async updateDoctorStatus(doctorId: string, delayStatus: string): Promise<Doctor | null> {
-    const db = await getDatabase();
-    const res = await db.query<Doctor>(
-      'UPDATE doctors SET delay_status = $1 WHERE id = $2 RETURNING *',
-      [delayStatus, doctorId]
-    );
-    return res.rows[0] || null;
   }
 }

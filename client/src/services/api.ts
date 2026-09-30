@@ -149,6 +149,18 @@ export async function updateDoctorStatus(doctorId: string, delayStatus: string):
   return res.json();
 }
 
+export async function updateDoctorAvgConsultationTime(doctorId: string, avgMinutes: number): Promise<Doctor> {
+  const res = await fetch(`${API_BASE}/doctors/${doctorId}/consultation-time`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avg_consultation_time: avgMinutes }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to update average consultation time: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function resetDemoData(mode: 'active_demo' | 'all_booked' = 'active_demo'): Promise<{ message: string; overview: QueueOverview }> {
   const res = await fetch(`${API_BASE}/demo/reset`, {
     method: 'POST',

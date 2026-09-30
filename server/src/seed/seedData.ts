@@ -19,13 +19,13 @@ export async function seedDatabase(mode: 'active_demo' | 'all_booked' = 'active_
 
   console.log('Seeding database with demo data (mode:', mode, ')...');
 
-  // 1. Seed Doctor
+  // 1. Seed Doctor with avg_consultation_time = 15 min
   await db.query(
-    `INSERT INTO doctors (id, name, room, delay_status)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (id) DO UPDATE 
-     SET name = EXCLUDED.name, room = EXCLUDED.room, delay_status = EXCLUDED.delay_status`,
-    ['dr-kumar', 'Dr. Kumar', 'Room 2', 'Available']
+     SET name = EXCLUDED.name, room = EXCLUDED.room, delay_status = EXCLUDED.delay_status, avg_consultation_time = EXCLUDED.avg_consultation_time`,
+    ['dr-kumar', 'Dr. Kumar', 'Room 2', 'Available', 15]
   );
 
   // 2. Clear old demo patients and queue
@@ -45,10 +45,10 @@ export async function seedDatabase(mode: 'active_demo' | 'all_booked' = 'active_
     }
 
     const res = await db.query(
-      `INSERT INTO patients (token, patient_name, phone, doctor_id, appointment_time, status, checked_in_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO patients (token, patient_name, phone, doctor_id, appointment_time, status, is_walk_in, checked_in_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, token`,
-      [p.token, p.name, p.phone, 'dr-kumar', p.time, status, checkedInAt]
+      [p.token, p.name, p.phone, 'dr-kumar', p.time, status, false, checkedInAt]
     );
 
     if (p.token === 'A05' && mode === 'active_demo') {

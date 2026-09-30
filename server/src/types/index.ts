@@ -13,6 +13,7 @@ export interface Doctor {
   name: string;
   room: string;
   delay_status: string;
+  avg_consultation_time: number;
   created_at: string;
 }
 
@@ -77,10 +78,14 @@ export interface PatientTrackingInfo {
   patient_name: string;
   status: PatientStatus;
   appointment_time: string;
+  is_walk_in: boolean;
   doctor_name: string;
   room: string;
   delay_status: string;
   is_doctor_delayed: boolean;
+  avg_consultation_time: number;
+  estimated_wait_text: string | null;
+  estimated_wait_minutes: number | null;
   current_serving_token: string | null;
   current_serving_name: string | null;
   current_serving_status: PatientStatus | null;
