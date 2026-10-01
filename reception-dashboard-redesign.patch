@@ -1,0 +1,1227 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index f9547b4..d4ed32e 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -4,11 +4,9 @@ import type { QueueOverview } from './types';
+ import { fetchQueueOverview, resetDemoData } from './services/api';
+ import { wsClient } from './services/websocket';
+ import { DemoLauncher } from './components/DemoLauncher';
+-import { Navigation } from './components/Navigation';
+ import { ReceptionDashboard } from './components/ReceptionDashboard';
+ import { PatientTrackingPage } from './components/PatientTrackingPage';
+ import { WaitingRoomTVDisplay } from './components/WaitingRoomTVDisplay';
+-import { AlertCircle } from 'lucide-react';
+ 
+ export function App() {
+   const [overview, setOverview] = useState<QueueOverview | null>(null);
+@@ -83,32 +81,17 @@ export function App() {
+         <Route
+           path="/reception"
+           element={
+-            <div className="min-h-screen bg-slate-50 text-slate-900">
+-              <Navigation
+-                onRefresh={() => loadData(false)}
++            overview ? (
++              <ReceptionDashboard
++                overview={overview}
++                onRefresh={() => loadData(true)}
+                 onResetDemo={handleResetDemo}
+                 isRefreshing={isRefreshing}
++                error={error}
+               />
+-              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+-                {error && (
+-                  <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between shadow-sm">
+-                    <div className="flex items-center gap-2">
+-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+-                      <span>{error}</span>
+-                    </div>
+-                    <button
+-                      onClick={() => loadData(false)}
+-                      className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition"
+-                    >
+-                      Retry
+-                    </button>
+-                  </div>
+-                )}
+-                {overview && (
+-                  <ReceptionDashboard overview={overview} onRefresh={() => loadData(true)} />
+-                )}
+-              </main>
+-            </div>
++            ) : (
++              <div className="min-h-screen flex items-center justify-center text-slate-500">Loading...</div>
++            )
+           }
+         />
+ 
+diff --git a/client/src/components/ReceptionDashboard.tsx b/client/src/components/ReceptionDashboard.tsx
+index 827463e..11db7d4 100644
+--- a/client/src/components/ReceptionDashboard.tsx
++++ b/client/src/components/ReceptionDashboard.tsx
+@@ -1,29 +1,29 @@
+ import React, { useState } from 'react';
+-import type { QueueOverview, PatientStatus } from '../types';
+-import { StatusBadge } from './StatusBadge';
++import { Link } from 'react-router-dom';
++import type { QueueOverview, PatientStatus, Patient } from '../types';
+ import { CsvImportModal } from './CsvImportModal';
+ import { WalkInModal } from './WalkInModal';
+ import {
+-  UserCheck,
+-  Clock,
+-  Users,
+-  Phone,
+-  FileSpreadsheet,
+-  AlertTriangle,
+-  Play,
+-  SkipForward,
+-  UserX,
+-  Stethoscope,
+-  DoorOpen,
+   Sparkles,
+-  CalendarCheck,
++  Cross,
++  Monitor,
++  LayoutPanelLeft,
++  Settings,
++  Megaphone,
+   CheckCircle2,
+-  Hourglass,
+-  Check,
++  CalendarDays,
+   UserPlus,
+-  Activity,
+-  BarChart3,
+-  TrendingUp,
++  Search,
++  MoreHorizontal,
++  MoreVertical,
++  ChevronDown,
++  Stethoscope,
++  FileUp,
++  Hourglass,
++  RotateCw,
++  RotateCcw,
++  Home,
++  X,
+ } from 'lucide-react';
+ import {
+   checkInPatient,
+@@ -40,18 +40,79 @@ import {
+ interface ReceptionDashboardProps {
+   overview: QueueOverview;
+   onRefresh: () => void;
++  onResetDemo?: (mode: 'active_demo' | 'all_booked') => void;
++  isRefreshing?: boolean;
++  error?: string | null;
+ }
+ 
+-type FilterCategory = 'ALL' | 'BOOKED' | 'WAITING' | 'CALLED' | 'IN_CONSULTATION' | 'COMPLETED' | 'NO_SHOW' | 'WALK_IN';
++type FilterCategory = 'ALL' | 'BOOKED' | 'WAITING' | 'CALLED' | 'COMPLETED' | 'MISSED' | 'WALK_IN';
++
++const FILTERS: { key: FilterCategory; label: string }[] = [
++  { key: 'ALL', label: 'All' },
++  { key: 'BOOKED', label: 'Booked' },
++  { key: 'WAITING', label: 'Waiting' },
++  { key: 'CALLED', label: 'Called' },
++  { key: 'COMPLETED', label: 'Completed' },
++  { key: 'MISSED', label: 'No-show' },
++  { key: 'WALK_IN', label: 'Walk-ins' },
++];
++
++const matchesFilter = (p: Patient, f: FilterCategory): boolean => {
++  switch (f) {
++    case 'ALL': return true;
++    case 'BOOKED': return p.status === 'BOOKED';
++    case 'WAITING': return p.status === 'WAITING';
++    case 'CALLED': return p.status === 'CALLED' || p.status === 'IN_CONSULTATION';
++    case 'COMPLETED': return p.status === 'COMPLETED';
++    case 'MISSED': return p.status === 'NO_SHOW' || p.status === 'SKIPPED';
++    case 'WALK_IN': return p.is_walk_in === true;
++  }
++};
+ 
+-export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview, onRefresh }) => {
++const fmtTime = (iso?: string | null): string =>
++  iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
++
++const STATUS_PILL: Record<PatientStatus, { label: string; cls: string }> = {
++  BOOKED: { label: 'Booked', cls: 'bg-slate-100 text-slate-600' },
++  CHECKED_IN: { label: 'Checked in', cls: 'bg-sky-50 text-sky-700' },
++  WAITING: { label: 'Waiting', cls: 'bg-[#e3f1ee] text-[#2a6a60]' },
++  CALLED: { label: 'Called', cls: 'bg-blue-50 text-blue-700' },
++  IN_CONSULTATION: { label: 'In consultation', cls: 'bg-emerald-50 text-emerald-700' },
++  COMPLETED: { label: 'Completed', cls: 'bg-slate-100 text-slate-500' },
++  SKIPPED: { label: 'Skipped', cls: 'bg-amber-50 text-amber-700' },
++  NO_SHOW: { label: 'No-show', cls: 'bg-rose-50 text-rose-700' },
++};
++
++const StatusPill: React.FC<{ status: PatientStatus }> = ({ status }) => (
++  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${STATUS_PILL[status].cls}`}>
++    <span className="w-1.5 h-1.5 rounded-full bg-current" />
++    {STATUS_PILL[status].label}
++  </span>
++);
++
++const card = 'bg-white rounded-2xl border border-[#e6eaf2] shadow-[0_1px_2px_rgba(15,27,45,0.04),0_6px_16px_rgba(15,27,45,0.04)]';
++const eyebrow = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#5b6b82]';
++
++export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
++  overview,
++  onRefresh,
++  onResetDemo,
++  isRefreshing = false,
++  error = null,
++}) => {
+   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
+-  const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('ALL');
++  const [selectedFilter, setSelectedFilter] = useState<FilterCategory>(
++    overview.stats.waiting > 0 ? 'WAITING' : 'ALL'
++  );
++  const [search, setSearch] = useState('');
+   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+   const [isUpdating, setIsUpdating] = useState(false);
++  const [rowMenu, setRowMenu] = useState<number | null>(null);
++  const [moreOpen, setMoreOpen] = useState(false);
++  const [settingsOpen, setSettingsOpen] = useState(false);
+ 
+-  const { hospital_name, doctor, current_patient, next_patients, all_patients, stats, summary } = overview;
++  const { doctor, current_patient, next_patients, all_patients, stats } = overview;
+ 
+   const showToast = (msg: string) => {
+     setActionFeedback(msg);
+@@ -189,649 +250,453 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
+   };
+ 
+   const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
++  const nextPatient = next_patients[0] ?? null;
+   const hasWaitingPatients = next_patients.length > 0;
+ 
+-  // Filtered Patients List (Section 4)
+-  const filteredPatients = all_patients.filter((p) => {
+-    if (selectedFilter === 'ALL') return true;
+-    if (selectedFilter === 'BOOKED') return p.status === 'BOOKED';
+-    if (selectedFilter === 'WAITING') return p.status === 'WAITING';
+-    if (selectedFilter === 'CALLED') return p.status === 'CALLED';
+-    if (selectedFilter === 'IN_CONSULTATION') return p.status === 'IN_CONSULTATION';
+-    if (selectedFilter === 'COMPLETED') return p.status === 'COMPLETED';
+-    if (selectedFilter === 'NO_SHOW') return p.status === 'NO_SHOW' || p.status === 'SKIPPED';
+-    if (selectedFilter === 'WALK_IN') return p.is_walk_in === true;
+-    return true;
+-  });
++  const now = new Date();
++  const hour = now.getHours();
++  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
++  const dateLine = now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
++
++  const q = search.trim().toLowerCase();
++  const filteredPatients = all_patients.filter(
++    (p) =>
++      matchesFilter(p, selectedFilter) &&
++      (!q || p.token.toLowerCase().includes(q) || p.patient_name.toLowerCase().includes(q))
++  );
++  const count = (f: FilterCategory) => all_patients.filter((p) => matchesFilter(p, f)).length;
++
++  const apptLabel = (p: Patient) =>
++    p.is_walk_in ? `Walk-in (${fmtTime(p.checked_in_at || p.created_at)})` : p.appointment_time;
++
++  const doctorStatus = (
++    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${isDoctorDelayed ? 'text-amber-700' : 'text-[#2a6a60]'}`}>
++      <span className={`w-1.5 h-1.5 rounded-full ${isDoctorDelayed ? 'bg-amber-500' : 'bg-[#2a6a60]'}`} />
++      {isDoctorDelayed ? 'Delayed (15m)' : 'Available'}
++    </span>
++  );
++
++  const navItem = (active: boolean) =>
++    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
++      active ? 'bg-[#d3e9e4] text-[#1f4f48]' : 'text-slate-700 hover:bg-slate-100'
++    }`;
++
++  const btnSoft =
++    'inline-flex items-center justify-center gap-2 rounded-xl bg-[#e8effb] hover:bg-[#dce6f8] text-[#1f2f4a] text-sm font-medium px-3.5 py-2 min-h-[40px] transition disabled:opacity-50';
+ 
+   return (
+-    <div className="space-y-6 pb-12">
+-      {/* Toast Bar */}
++    <div className="min-h-screen bg-[#f3f5fa] text-[#0f1b2d] lg:pl-[280px]">
++      {/* Toast */}
+       {actionFeedback && (
+-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200">
+-          <Sparkles className="w-4 h-4 text-hospital-400" />
++        <div className="fixed bottom-6 right-4 sm:right-6 z-50 max-w-[calc(100vw-2rem)] bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium">
++          <Sparkles className="w-4 h-4 text-[#7fd1c4] shrink-0" />
+           <span>{actionFeedback}</span>
+         </div>
+       )}
+ 
+-      {/* TOP HEADER SECTION */}
+-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
+-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+-          <div className="space-y-1">
+-            <div className="flex items-center gap-2">
+-              <span className="text-xs font-bold uppercase tracking-wider text-hospital-700 bg-hospital-50 border border-hospital-200 px-2.5 py-0.5 rounded-md">
+-                Floor Reception Console
+-              </span>
+-              <span className="text-xs text-slate-400">•</span>
+-              <span className="text-xs text-slate-500 font-medium">Outpatient Department (OPD)</span>
+-            </div>
+-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+-              {hospital_name}
+-            </h2>
+-            <div className="flex flex-wrap items-center gap-3 pt-1">
+-              <div className="flex items-center gap-1.5 text-base font-bold text-slate-800">
+-                <Stethoscope className="w-5 h-5 text-hospital-600" />
+-                <span>{doctor.name}</span>
+-              </div>
+-              <span className="text-slate-300">|</span>
+-              <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+-                <DoorOpen className="w-4 h-4 text-slate-500" />
+-                <span>{doctor.room}</span>
+-              </div>
+-            </div>
+-          </div>
+-
+-          {/* Action Toolbar: + Walk-In, Import CSV, Doctor Delay Toggle, Avg Consultation Time */}
+-          <div className="flex flex-wrap items-center gap-3">
+-            
+-            {/* Average Consultation Time Setting */}
+-            <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl shadow-sm">
+-              <Clock className="w-4 h-4 text-hospital-600 shrink-0" />
+-              <div className="flex flex-col">
+-                <label htmlFor="avg-consultation-time" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+-                  Avg Consultation Time
+-                </label>
+-                <select
+-                  id="avg-consultation-time"
+-                  value={doctor.avg_consultation_time || 15}
+-                  onChange={(e) => handleConsultationTimeChange(Number(e.target.value))}
+-                  disabled={isUpdating}
+-                  className="text-xs sm:text-sm font-bold text-slate-800 bg-transparent border-0 p-0 pr-1 focus:ring-0 cursor-pointer font-sans outline-none"
+-                >
+-                  <option value={10}>10 minutes</option>
+-                  <option value={15}>15 minutes (Default)</option>
+-                  <option value={20}>20 minutes</option>
+-                  <option value={30}>30 minutes</option>
+-                </select>
+-              </div>
+-            </div>
+-
+-            {/* + WALK-IN PATIENT BUTTON (Section 3) */}
+-            <button
+-              onClick={() => setIsWalkInModalOpen(true)}
+-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-hospital-600 hover:bg-hospital-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-hospital-600/20 transition"
+-            >
+-              <UserPlus className="w-4 h-4" />
+-              <span>+ WALK-IN PATIENT</span>
+-            </button>
+-
+-            {/* IMPORT APPOINTMENTS BUTTON (Section 2) */}
+-            <button
+-              onClick={() => setIsCsvModalOpen(true)}
+-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition"
+-            >
+-              <FileSpreadsheet className="w-4 h-4 text-hospital-300" />
+-              <span>IMPORT APPOINTMENTS</span>
+-            </button>
+-
+-            {/* Doctor Delay Status Toggle (Section 9) */}
+-            <button
+-              onClick={handleToggleDoctorDelay}
+-              disabled={isUpdating}
+-              className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border transition text-left shadow-sm ${
+-                isDoctorDelayed
+-                  ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100'
+-                  : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-slate-100'
+-              }`}
+-              title="Click to toggle doctor delay status"
+-            >
+-              <div className="flex flex-col">
+-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+-                  Doctor Status
+-                </span>
+-                <div className="flex items-center gap-2 mt-0.5">
+-                  <span
+-                    className={`w-2.5 h-2.5 rounded-full ${
+-                      isDoctorDelayed
+-                        ? 'bg-amber-500 animate-ping'
+-                        : 'bg-emerald-500 animate-pulse'
+-                    }`}
+-                  />
+-                  <span className="text-xs sm:text-sm font-bold">
+-                    {isDoctorDelayed ? 'DOCTOR DELAYED (15m)' : 'AVAILABLE'}
+-                  </span>
+-                </div>
+-              </div>
+-            </button>
++      {/* SIDEBAR (desktop / tablet landscape) */}
++      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-[280px] flex-col bg-white border-r border-[#e6eaf2] px-5 py-6 overflow-y-auto">
++        <div className="flex items-center gap-3">
++          <div className="w-11 h-11 rounded-xl bg-[#d3e9e4] text-[#1f4f48] flex items-center justify-center shrink-0">
++            <Cross className="w-5 h-5" strokeWidth={2.5} />
+           </div>
+-        </div>
+-      </div>
+-
+-      {/* DYNAMIC DASHBOARD STATISTICS CARDS (Section 5) */}
+-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-slate-400 uppercase">Total Booked</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-slate-900">{stats.total}</span>
+-            <span className="text-[10px] text-slate-400">Appts</span>
++          <div className="min-w-0">
++            <div className="text-[15px] font-bold leading-tight">CITY CARE HOSPITAL</div>
++            <div className="text-[11px] font-semibold tracking-[0.12em] text-[#2a6a60]">RECEPTION</div>
+           </div>
+         </div>
+ 
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-sky-700 uppercase">Checked In</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-sky-700">{stats.checked_in}</span>
+-            <span className="text-[10px] text-sky-600">Total</span>
++        <div className={`${eyebrow} mt-8 mb-2 px-1`}>Operations</div>
++        <nav className="space-y-1">
++          <Link to="/reception" className={navItem(true)}>
++            <LayoutPanelLeft className="w-5 h-5" /> Reception
++          </Link>
++          <Link to="/display" className={navItem(false)}>
++            <Monitor className="w-5 h-5" /> Waiting Room TV
++          </Link>
++        </nav>
++
++        <div className="border-t border-[#e6eaf2] mt-6 pt-5">
++          <div className={`${eyebrow} mb-2 px-1`}>Queue today</div>
++          <div className="grid grid-cols-3 bg-[#eef3fb] rounded-xl py-3 divide-x divide-[#d9e2f1] text-center">
++            <div>
++              <div className="text-lg font-bold text-[#2a6a60]">{stats.waiting}</div>
++              <div className="text-xs text-[#5b6b82]">Waiting</div>
++            </div>
++            <div>
++              <div className="text-lg font-bold">{current_patient?.token ?? '—'}</div>
++              <div className="text-xs text-[#5b6b82]">Serving</div>
++            </div>
++            <div>
++              <div className="text-lg font-bold">{nextPatient?.token ?? '—'}</div>
++              <div className="text-xs text-[#5b6b82]">Next</div>
++            </div>
+           </div>
+         </div>
+ 
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-amber-700 uppercase">Waiting</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-amber-700">{stats.waiting}</span>
+-            <span className="text-[10px] text-amber-600">In Line</span>
++        <div className="border-t border-[#e6eaf2] mt-5 pt-4 px-1">
++          <div className="flex items-start justify-between gap-2">
++            <div className="min-w-0">
++              <div className="text-xs font-bold uppercase tracking-wide truncate">{doctor.name}</div>
++              <div className="text-sm text-[#5b6b82]">{doctor.room}</div>
++            </div>
++            <span className={`rounded-full px-2.5 py-1 ${isDoctorDelayed ? 'bg-amber-50' : 'bg-[#e3f1ee]'}`}>{doctorStatus}</span>
+           </div>
+         </div>
+ 
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-emerald-700 uppercase">In Room</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-emerald-700">
+-              {stats.in_consultation + (current_patient?.status === 'CALLED' ? 1 : 0)}
+-            </span>
+-            <span className="text-[10px] text-emerald-600">Active</span>
+-          </div>
+-        </div>
++        <button onClick={() => setSettingsOpen(true)} className={`${navItem(false)} mt-auto`}>
++          <Settings className="w-5 h-5" /> Settings
++        </button>
++      </aside>
+ 
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-teal-700 uppercase">Completed</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-teal-700">{stats.completed}</span>
+-            <span className="text-[10px] text-teal-600">Done</span>
+-          </div>
++      {/* TOP BAR (below lg: compact navigation) */}
++      <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-[#e6eaf2] px-4 py-3 flex items-center gap-3">
++        <div className="w-9 h-9 rounded-xl bg-[#d3e9e4] text-[#1f4f48] flex items-center justify-center shrink-0">
++          <Cross className="w-4 h-4" strokeWidth={2.5} />
+         </div>
+-
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+-          <span className="text-[11px] font-bold text-rose-700 uppercase">No Show</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-rose-700">{stats.no_show + stats.skipped}</span>
+-            <span className="text-[10px] text-rose-600">Missed</span>
++        <div className="min-w-0 flex-1">
++          <div className="text-sm font-bold leading-tight truncate">CITY CARE HOSPITAL</div>
++          <div className="text-[10px] font-semibold tracking-[0.12em] text-[#2a6a60]">RECEPTION</div>
++        </div>
++        <Link to="/display" className="inline-flex items-center gap-1.5 rounded-lg bg-[#eef3fb] px-3 py-2 text-xs font-medium min-h-[40px]">
++          <Monitor className="w-4 h-4" /> <span className="hidden sm:inline">Waiting Room TV</span><span className="sm:hidden">TV</span>
++        </Link>
++        <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="rounded-lg bg-[#eef3fb] p-2.5 min-h-[40px]">
++          <Settings className="w-4 h-4" />
++        </button>
++      </header>
++
++      <main className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-8 py-5 lg:py-6 space-y-5 lg:space-y-6 min-w-0">
++        {error && (
++          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">{error}</div>
++        )}
++
++        {/* MAIN HEADER */}
++        <div className="flex flex-wrap items-center justify-between gap-3">
++          <div className="flex items-center gap-3">
++            <h1 className="text-lg font-bold tracking-tight">RECEPTION</h1>
++            <span className="rounded-full bg-[#e3f1ee] text-[#2a6a60] text-xs font-medium px-3 py-1">Outpatient Queue</span>
++          </div>
++          <div className={`${card} rounded-full px-4 py-2 flex items-center gap-3 text-sm`}>
++            <span className="font-medium">{doctor.name} · {doctor.room}</span>
++            <span className="w-px h-4 bg-[#dbe3ef]" />
++            {doctorStatus}
+           </div>
+         </div>
+ 
+-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+-          <span className="text-[11px] font-bold text-purple-700 uppercase">Walk-Ins</span>
+-          <div className="mt-1 flex items-baseline gap-1.5">
+-            <span className="text-2xl font-black text-purple-700">{stats.walk_ins}</span>
+-            <span className="text-[10px] text-purple-600">Added</span>
++        {/* GREETING */}
++        <div className="flex items-end justify-between gap-3 flex-wrap">
++          <div>
++            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{greeting}, Reception</h2>
++            <div className="flex items-center gap-2 text-sm text-[#5b6b82] mt-1">
++              <CalendarDays className="w-4 h-4" /> {dateLine} · General Outpatient
++            </div>
+           </div>
++          <button onClick={() => setIsWalkInModalOpen(true)} className={`${card} inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm font-medium hover:bg-slate-50 transition`}>
++            <UserPlus className="w-4 h-4" /> + Walk-in
++          </button>
+         </div>
+-      </div>
+-
+-      {/* CORE QUEUE MANAGEMENT ROW */}
+-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+-        
+-        {/* LEFT: CURRENTLY SERVING & ACTION CONSOLE (5 cols) */}
+-        <div className="lg:col-span-5 space-y-6">
+-          
+-          {/* CURRENTLY SERVING CARD */}
+-          <div className="bg-white rounded-2xl border-2 border-emerald-500/40 p-6 shadow-md shadow-emerald-500/5 relative overflow-hidden">
+-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/10 to-transparent rounded-bl-full pointer-events-none" />
+-            
+-            <div className="flex items-center justify-between mb-4">
+-              <div className="flex items-center gap-2">
+-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+-                <h3 className="text-xs font-black uppercase tracking-widest text-emerald-800">
+-                  CURRENTLY SERVING
+-                </h3>
+-              </div>
+-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-md">
+-                Room 2
+-              </span>
++
++        {/* NOW SERVING + NEXT PATIENT */}
++        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start">
++          {/* NOW SERVING */}
++          <section className={`${card} p-5 sm:p-7 flex flex-col min-h-[300px]`}>
++            <div className="flex items-center justify-between gap-2">
++              <span className="rounded-md bg-[#e3f1ee] text-[#2a6a60] text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5">Now serving</span>
++              {current_patient && (
++                <span className="rounded-full bg-[#eef3fb] text-xs text-[#3b4a63] px-3 py-1.5 inline-flex items-center gap-2">
++                  <span className="w-1.5 h-1.5 rounded-full bg-[#2a6a60]" />
++                  {current_patient.status === 'CALLED' ? 'Called — awaiting arrival' : 'In consultation'}
++                </span>
++              )}
+             </div>
+ 
+             {current_patient ? (
+-              <div className="space-y-4">
+-                <div className="flex items-start justify-between">
+-                  <div>
+-                    <div className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight font-mono">
+-                      {current_patient.token}
+-                    </div>
+-                    <div className="text-xl font-bold text-slate-800 mt-1">
+-                      {current_patient.patient_name}
+-                    </div>
+-                    {current_patient.is_walk_in && (
+-                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+-                        Walk-In Patient
+-                      </span>
+-                    )}
+-                  </div>
+-                  <StatusBadge status={current_patient.status} size="md" />
+-                </div>
+-
+-                <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-3 text-xs text-slate-600">
+-                  <div className="flex items-center gap-1.5 font-medium">
+-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+-                    <span>Appt: {current_patient.appointment_time}</span>
+-                  </div>
+-                  <div className="flex items-center gap-1.5 font-medium">
+-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+-                    <span>{current_patient.phone}</span>
+-                  </div>
++              <>
++                <div className="text-5xl sm:text-6xl font-extrabold tracking-tight mt-5">{current_patient.token}</div>
++                <div className="text-xl font-medium mt-2">{current_patient.patient_name}</div>
++                <div className="text-sm text-[#5b6b82] mt-1">
++                  {doctor.name} · {doctor.room} ·{' '}
++                  {current_patient.status === 'CALLED'
++                    ? `Called ${fmtTime(current_patient.called_at)}`
++                    : `Started ${fmtTime(current_patient.updated_at || current_patient.called_at)}`}
+                 </div>
+ 
+-                {/* CONTEXTUAL ACTION BUTTONS */}
+-                <div className="mt-4 pt-4 border-t border-slate-200">
+-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+-                    Active Patient Actions
+-                  </div>
+-
+-                  {current_patient.status === 'CALLED' && (
+-                    <div className="space-y-2">
++                <div className="mt-auto pt-6">
++                  {current_patient.status === 'CALLED' ? (
++                    <div className="space-y-3">
+                       <button
+                         onClick={() => handleStartConsultation(current_patient.id, current_patient.token)}
+                         disabled={isUpdating}
+-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
++                        className="w-full min-h-[52px] rounded-xl bg-[#2f7167] hover:bg-[#295f57] text-white text-base font-medium inline-flex items-center justify-center gap-2 transition disabled:opacity-50"
+                       >
+-                        <UserCheck className="w-4 h-4" />
+-                        <span>START CONSULTATION</span>
++                        <CheckCircle2 className="w-5 h-5" /> Start Consultation
+                       </button>
+-
+-                      <div className="grid grid-cols-2 gap-2">
+-                        <button
+-                          onClick={() => handleSkip(current_patient.id, current_patient.token)}
+-                          disabled={isUpdating}
+-                          className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+-                        >
+-                          <SkipForward className="w-3.5 h-3.5 text-slate-600" />
+-                          <span>SKIP</span>
+-                        </button>
+-
+-                        <button
+-                          onClick={() => handleNoShow(current_patient.id, current_patient.token)}
+-                          disabled={isUpdating}
+-                          className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+-                        >
+-                          <UserX className="w-3.5 h-3.5 text-rose-600" />
+-                          <span>NO SHOW</span>
+-                        </button>
++                      <div className="flex items-center justify-center gap-6 text-sm text-[#3b4a63]">
++                        <button onClick={() => handleSkip(current_patient.id, current_patient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">Skip</button>
++                        <button onClick={() => handleNoShow(current_patient.id, current_patient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">No-show</button>
+                       </div>
+                     </div>
+-                  )}
+-
+-                  {current_patient.status === 'IN_CONSULTATION' && (
+-                    <div className="space-y-2">
++                  ) : (
++                    <div className="space-y-3">
+                       <button
+                         onClick={() => handleCompleteConsultation(current_patient.id, current_patient.token)}
+                         disabled={isUpdating}
+-                        className="w-full py-3 px-4 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-md shadow-teal-600/20 flex items-center justify-center gap-2 transition disabled:opacity-50"
+-                      >
+-                        <Check className="w-4 h-4" />
+-                        <span>COMPLETE CONSULTATION</span>
+-                      </button>
+-
+-                      <button
+-                        onClick={() => handleSkip(current_patient.id, current_patient.token)}
+-                        disabled={isUpdating}
+-                        className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
++                        className="w-full min-h-[52px] rounded-xl border border-[#b7cfca] bg-white hover:bg-[#f2f8f6] text-[#1f4f48] text-base font-medium inline-flex items-center justify-center gap-2 transition disabled:opacity-50"
+                       >
+-                        <SkipForward className="w-3.5 h-3.5 text-slate-500" />
+-                        <span>End / Skip Consultation</span>
++                        <CheckCircle2 className="w-5 h-5 text-[#2f7167]" /> Complete Consultation
+                       </button>
++                      <div className="flex justify-center">
++                        <button onClick={() => handleSkip(current_patient.id, current_patient.token)} disabled={isUpdating} className="text-sm text-[#5b6b82] hover:text-[#0f1b2d] px-3 py-2 min-h-[40px]">
++                          End / Skip consultation
++                        </button>
++                      </div>
+                     </div>
+                   )}
+                 </div>
+-              </div>
++              </>
+             ) : (
+-              <div className="py-8 text-center text-slate-400">
+-                <p className="text-base font-semibold text-slate-600">No Patient In Room</p>
+-                <p className="text-xs text-slate-400 mt-1">
+-                  {hasWaitingPatients
+-                    ? 'Click "CALL NEXT" below to call the next waiting patient.'
+-                    : 'No patients are currently waiting in the queue.'}
++              <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
++                <div className="text-lg font-semibold text-[#3b4a63]">No patient in room</div>
++                <p className="text-sm text-[#5b6b82] mt-1">
++                  {hasWaitingPatients ? 'Use Call Next to bring in the next waiting patient.' : 'No patients are currently waiting.'}
+                 </p>
+               </div>
+             )}
+-
+-            {/* CALL NEXT BUTTON */}
+-            <div className="mt-5 pt-4 border-t border-slate-200">
+-              <div className="flex items-center justify-between mb-2">
+-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+-                  Queue Calling Control
+-                </span>
+-                <span className="text-xs font-medium text-slate-500">
+-                  {next_patients.length} Waiting
++          </section>
++
++          {/* NEXT PATIENT */}
++          <section className={`${card} p-5 sm:p-7 flex flex-col min-h-[300px]`}>
++            <div className="flex items-center justify-between gap-2 flex-wrap">
++              <span className="rounded-md bg-[#eef3fb] text-[#3b4a63] text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5">Next patient</span>
++              {nextPatient && (
++                <span className="text-xs font-medium text-[#3b4a63]">
++                  {nextPatient.is_walk_in ? 'Walk-in' : `Appt: ${nextPatient.appointment_time}`}
++                  {nextPatient.checked_in_at ? ` · Arrived ${fmtTime(nextPatient.checked_in_at)}` : ''}
+                 </span>
+-              </div>
+-
+-              <button
+-                onClick={handleCallNext}
+-                disabled={isUpdating || !hasWaitingPatients}
+-                className={`w-full py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 shadow-md transition ${
+-                  hasWaitingPatients
+-                    ? 'bg-hospital-600 hover:bg-hospital-700 active:bg-hospital-800 text-white shadow-hospital-600/25'
+-                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+-                }`}
+-              >
+-                <Play className="w-4 h-4 fill-current" />
+-                <span>CALL NEXT PATIENT</span>
+-              </button>
+-
+-              {!hasWaitingPatients && (
+-                <p className="text-[11px] text-slate-400 text-center mt-2 font-medium">
+-                  No patients are currently waiting.
+-                </p>
+               )}
+             </div>
+-          </div>
+ 
+-          {/* SECTION 6: TODAY'S SUMMARY CARD */}
+-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+-            <div className="flex items-center justify-between mb-3">
+-              <div className="flex items-center gap-2">
+-                <BarChart3 className="w-4 h-4 text-hospital-600" />
+-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+-                  TODAY'S SUMMARY
+-                </h4>
+-              </div>
+-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+-                Live Data
+-              </span>
+-            </div>
++            {nextPatient ? (
++              <>
++                <div className="text-5xl sm:text-6xl font-extrabold tracking-tight mt-5">{nextPatient.token}</div>
++                <div className="text-xl font-medium mt-2">{nextPatient.patient_name}</div>
++                <div className="text-sm text-[#5b6b82] mt-1">
++                  General Triage · {apptLabel(nextPatient)}
++                  {nextPatient.checked_in_at ? ` · Arrived ${fmtTime(nextPatient.checked_in_at)}` : ''}
++                </div>
+ 
+-            <div className="space-y-2.5 text-xs">
+-              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+-                <span className="text-slate-500 font-medium">Total Appointments</span>
+-                <span className="font-bold text-slate-900 font-mono">{summary.total_appointments}</span>
+-              </div>
+-              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+-                <span className="text-slate-500 font-medium">Checked In</span>
+-                <span className="font-bold text-sky-700 font-mono">{summary.checked_in_count}</span>
+-              </div>
+-              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+-                <span className="text-slate-500 font-medium">Completed</span>
+-                <span className="font-bold text-teal-700 font-mono">{summary.completed_count}</span>
+-              </div>
+-              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+-                <span className="text-slate-500 font-medium">No Show / Skipped</span>
+-                <span className="font-bold text-rose-700 font-mono">{summary.no_show_count + summary.skipped_count}</span>
+-              </div>
+-              <div className="flex items-center justify-between py-1.5 border-b border-slate-100">
+-                <span className="text-slate-500 font-medium">Walk-Ins</span>
+-                <span className="font-bold text-purple-700 font-mono">{summary.walk_ins_count}</span>
+-              </div>
+-              <div className="flex items-center justify-between pt-1">
+-                <span className="text-slate-500 font-medium flex items-center gap-1">
+-                  <TrendingUp className="w-3.5 h-3.5 text-hospital-600" /> Average Wait Time
+-                </span>
+-                <span className="font-bold text-hospital-700 font-mono bg-hospital-50 px-2 py-0.5 rounded">
+-                  ~{summary.avg_waiting_time_minutes} mins
+-                </span>
++                <div className="mt-auto pt-6 space-y-3">
++                  <button
++                    onClick={handleCallNext}
++                    disabled={isUpdating}
++                    className="w-full min-h-[56px] rounded-xl bg-[#2f7167] hover:bg-[#295f57] active:bg-[#235048] text-white text-lg font-semibold inline-flex items-center justify-center gap-3 shadow-[0_6px_16px_rgba(47,113,103,0.3)] transition disabled:opacity-50"
++                  >
++                    <Megaphone className="w-5 h-5" /> CALL NEXT ({nextPatient.token})
++                  </button>
++                  <div className="flex items-center justify-center gap-6 text-sm text-[#3b4a63]">
++                    <button onClick={() => handleSkip(nextPatient.id, nextPatient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">Skip</button>
++                    <button onClick={() => handleNoShow(nextPatient.id, nextPatient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">No-show</button>
++                  </div>
++                </div>
++              </>
++            ) : (
++              <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
++                <div className="text-lg font-semibold text-[#3b4a63]">No one waiting</div>
++                <p className="text-sm text-[#5b6b82] mt-1">Add a walk-in or check in a booked patient to fill the queue.</p>
++                <button disabled className="mt-5 w-full min-h-[56px] rounded-xl bg-slate-100 text-slate-400 text-lg font-semibold cursor-not-allowed">CALL NEXT</button>
+               </div>
+-            </div>
+-          </div>
++            )}
++          </section>
+         </div>
+ 
+-        {/* RIGHT: NEXT PATIENTS QUEUE & FILTERABLE TODAY'S PATIENTS TABLE (7 cols) */}
+-        <div className="lg:col-span-7 space-y-6">
+-          
+-          {/* NEXT PATIENTS SECTION (FIFO Queue) */}
+-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+-            <div className="flex items-center justify-between mb-4">
+-              <div className="flex items-center gap-2">
+-                <Users className="w-5 h-5 text-hospital-600" />
+-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
+-                  NEXT PATIENTS (FIFO WAITING QUEUE)
+-                </h3>
+-              </div>
+-              <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+-                {next_patients.length} in Waiting Queue
+-              </span>
++        {/* TODAY'S QUEUE */}
++        <section className={`${card} overflow-hidden`}>
++          <div className="p-5 sm:p-6 flex flex-wrap items-center gap-4">
++            <div className="flex items-center gap-3">
++              <h3 className="text-xl font-semibold leading-tight">Today's Queue</h3>
++              <span className="rounded-full bg-[#eef3fb] text-xs text-[#3b4a63] px-3 py-1.5 whitespace-nowrap">{stats.waiting} waiting</span>
+             </div>
+-
+-            {next_patients.length > 0 ? (
+-              <div className="space-y-2.5">
+-                {next_patients.map((patient, index) => (
+-                  <div
+-                    key={patient.id}
+-                    className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/80 transition"
++            <div className="flex gap-1 bg-[#eef3fb] rounded-xl p-1 overflow-x-auto shrink-0 max-w-full order-last xl:order-none">
++              {FILTERS.map((f) => {
++                const active = selectedFilter === f.key;
++                return (
++                  <button
++                    key={f.key}
++                    onClick={() => setSelectedFilter(f.key)}
++                    className={`rounded-lg px-3 py-1.5 min-h-[40px] text-sm whitespace-nowrap transition ${
++                      active ? 'bg-white text-[#2a6a60] font-semibold shadow-sm' : 'text-[#3b4a63] hover:bg-white/60'
++                    }`}
+                   >
+-                    <div className="flex items-center gap-3">
+-                      <div className="w-8 h-8 rounded-lg bg-hospital-100 text-hospital-800 font-mono font-bold text-xs flex items-center justify-center">
+-                        #{index + 1}
+-                      </div>
+-                      <div>
+-                        <div className="flex items-center gap-2">
+-                          <span className="font-mono font-bold text-sm text-slate-900">
+-                            {patient.token}
+-                          </span>
+-                          <span className="text-slate-400">•</span>
+-                          <span className="font-bold text-sm text-slate-800">
+-                            {patient.patient_name}
+-                          </span>
+-                          {patient.is_walk_in && (
+-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+-                              Walk-in
+-                            </span>
+-                          )}
+-                        </div>
+-                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+-                          <Clock className="w-3 h-3 text-slate-400" />
+-                          <span>Appt: {patient.appointment_time}</span>
+-                        </div>
+-                      </div>
++                    {f.label} ({count(f.key)})
++                  </button>
++                );
++              })}
++            </div>
++            <div className="flex items-center gap-3 ml-auto basis-full sm:basis-auto sm:flex-none min-w-0">
++              <label className="flex items-center gap-2 bg-[#eef3fb] rounded-xl px-3 min-h-[44px] flex-1 sm:w-[280px] min-w-0">
++                <Search className="w-4 h-4 text-[#5b6b82] shrink-0" />
++                <input
++                  value={search}
++                  onChange={(e) => setSearch(e.target.value)}
++                  placeholder="Search patient or token..."
++                  className="bg-transparent outline-none text-sm w-full min-w-0"
++                />
++              </label>
++              <button onClick={() => setIsWalkInModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#d3e9e4] hover:bg-[#c5e0da] text-[#1f4f48] text-sm font-medium px-4 min-h-[44px] whitespace-nowrap transition">
++                + Walk-in
++              </button>
++            </div>
++          </div>
++
++          {/* Column header (md and up) */}
++          <div className="hidden xl:grid grid-cols-[90px_minmax(0,1.6fr)_minmax(0,1.3fr)_minmax(0,1fr)_190px] gap-4 bg-[#eef1fb] px-6 py-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#3b4a63]">
++            <div>Token</div><div>Patient</div><div>Appointment</div><div>Status</div><div className="text-right">Action</div>
++          </div>
++
++          <div className="divide-y divide-[#eef1f6]">
++            {filteredPatients.length === 0 && (
++              <div className="py-10 text-center text-sm text-[#5b6b82]">No patients match this filter or search.</div>
++            )}
++            {filteredPatients.map((p) => {
++              const isNext = nextPatient?.id === p.id;
++              const hasMenu = p.status === 'WAITING' || p.status === 'CALLED';
++              return (
++                <div
++                  key={p.id}
++                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] xl:grid-cols-[90px_minmax(0,1.6fr)_minmax(0,1.3fr)_minmax(0,1fr)_190px] items-center gap-x-4 gap-y-3 px-4 sm:px-6 py-4 xl:py-5"
++                >
++                  <div className={`text-lg font-bold ${p.is_walk_in ? 'text-[#2a6a60]' : ''}`}>{p.token}</div>
++
++                  <div className="min-w-0 xl:contents">
++                    <div className="flex items-center gap-2 min-w-0">
++                      <span className="text-base font-medium truncate">{p.patient_name}</span>
++                      {isNext && <span className="rounded bg-[#2f7167] text-white text-[10px] font-bold px-1.5 py-0.5 shrink-0">NEXT</span>}
++                      {p.is_walk_in && <span className="rounded bg-[#e8effb] text-[#3b4a63] text-[11px] px-1.5 py-0.5 shrink-0">Walk-in</span>}
+                     </div>
++                    <div className="text-sm text-[#5b6b82] xl:text-[#3b4a63] xl:mt-0 mt-0.5">{apptLabel(p)}</div>
++                  </div>
+ 
+-                    <div className="flex items-center gap-2">
+-                      <StatusBadge status={patient.status} size="sm" />
+-                      {index === 0 && (
+-                        <button
+-                          onClick={handleCallNext}
+-                          disabled={isUpdating}
+-                          className="text-xs font-bold px-3 py-1 rounded-lg bg-hospital-600 text-white hover:bg-hospital-700 shadow-sm transition"
+-                        >
+-                          Call Next
+-                        </button>
++                  <div className="justify-self-end xl:justify-self-start"><StatusPill status={p.status} /></div>
++
++                  <div className="col-span-3 xl:col-span-1 flex items-center justify-end gap-2 relative">
++                    {p.status === 'BOOKED' && (
++                      <button onClick={() => handleCheckIn(p.id, p.token, p.patient_name)} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Check in</button>
++                    )}
++                    {p.status === 'WAITING' && isNext && (
++                      <button onClick={handleCallNext} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Call</button>
++                    )}
++                    {p.status === 'CALLED' && (
++                      <button onClick={() => handleStartConsultation(p.id, p.token)} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Start</button>
++                    )}
++                    {p.status === 'IN_CONSULTATION' && (
++                      <button onClick={() => handleCompleteConsultation(p.id, p.token)} disabled={isUpdating} className="rounded-lg border border-[#b7cfca] text-[#1f4f48] text-sm font-medium px-4 min-h-[40px] hover:bg-[#f2f8f6] transition disabled:opacity-50">Complete</button>
++                    )}
++                    {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
++                      <button onClick={() => handleRequeue(p.id, p.token)} disabled={isUpdating} className="text-sm text-[#3b4a63] hover:text-[#0f1b2d] px-3 min-h-[40px]">Re-queue</button>
++                    )}
++                    <div className="w-9 flex justify-center">
++                      {hasMenu && (
++                        <>
++                          <button onClick={() => setRowMenu(rowMenu === p.id ? null : p.id)} aria-label={`More actions for ${p.token}`} className="p-2 rounded-lg hover:bg-slate-100 text-[#5b6b82]">
++                            <MoreHorizontal className="w-5 h-5" />
++                          </button>
++                          {rowMenu === p.id && (
++                            <>
++                              <div className="fixed inset-0 z-30" onClick={() => setRowMenu(null)} />
++                              <div className="absolute right-0 top-full mt-1 z-40 w-40 bg-white rounded-xl border border-[#e6eaf2] shadow-xl p-1.5 text-sm">
++                                <button onClick={() => { setRowMenu(null); handleSkip(p.id, p.token); }} className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">Skip</button>
++                                <button onClick={() => { setRowMenu(null); handleNoShow(p.id, p.token); }} className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-rose-50 text-rose-700">No-show</button>
++                              </div>
++                            </>
++                          )}
++                        </>
+                       )}
+-                      <button
+-                        onClick={() => handleSkip(patient.id, patient.token)}
+-                        disabled={isUpdating}
+-                        className="text-xs font-semibold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+-                      >
+-                        Skip
+-                      </button>
+-                      <button
+-                        onClick={() => handleNoShow(patient.id, patient.token)}
+-                        disabled={isUpdating}
+-                        className="text-xs font-semibold px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition"
+-                      >
+-                        No Show
+-                      </button>
+                     </div>
+                   </div>
+-                ))}
+-              </div>
+-            ) : (
+-              <div className="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+-                <p className="text-sm font-medium">No patients are currently waiting.</p>
+-                <p className="text-xs text-slate-400 mt-1">
+-                  Click "+ WALK-IN PATIENT" or check in booked patients below to populate the queue.
+-                </p>
+-              </div>
+-            )}
+-          </div>
+-
+-          {/* SECTION 4: TODAY'S PATIENTS WITH SIMPLE FILTERS */}
+-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+-            <div className="p-4 sm:p-5 border-b border-slate-200 space-y-3 bg-slate-50/50">
+-              <div className="flex items-center justify-between">
+-                <div>
+-                  <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+-                    TODAY'S PATIENTS ({all_patients.length})
+-                  </h3>
+-                  <p className="text-xs text-slate-500 font-medium">
+-                    Integrated view of hospital appointments and floor walk-ins
+-                  </p>
+                 </div>
+-              </div>
+-
+-              {/* Simple Filter Pills (Section 4) */}
+-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+-                {(['ALL', 'BOOKED', 'WAITING', 'CALLED', 'IN_CONSULTATION', 'COMPLETED', 'NO_SHOW', 'WALK_IN'] as FilterCategory[]).map(
+-                  (filter) => (
+-                    <button
+-                      key={filter}
+-                      onClick={() => setSelectedFilter(filter)}
+-                      className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
+-                        selectedFilter === filter
+-                          ? 'bg-hospital-600 text-white shadow-sm'
+-                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+-                      }`}
+-                    >
+-                      {filter === 'ALL'
+-                        ? 'All'
+-                        : filter === 'IN_CONSULTATION'
+-                        ? 'In Consultation'
+-                        : filter === 'NO_SHOW'
+-                        ? 'No Show / Skipped'
+-                        : filter === 'WALK_IN'
+-                        ? 'Walk-ins'
+-                        : filter.charAt(0) + filter.slice(1).toLowerCase()}
++              );
++            })}
++          </div>
++        </section>
++
++        {/* BOTTOM OPERATIONAL BAR */}
++        <section className={`${card} px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3`}>
++          <div className="flex items-center gap-3 text-sm">
++            <Stethoscope className="w-5 h-5 text-[#3b4a63]" />
++            <span className="font-medium">{doctor.name} · {doctor.room}</span>
++            <span className="w-px h-4 bg-[#dbe3ef]" />
++            {doctorStatus}
++          </div>
++          <div className="flex items-center gap-2 flex-wrap">
++            <button onClick={() => setIsCsvModalOpen(true)} className={btnSoft}><FileUp className="w-4 h-4" /> Import CSV</button>
++            <button
++              onClick={handleToggleDoctorDelay}
++              disabled={isUpdating}
++              title="Toggle doctor delay"
++              className={`${btnSoft} ${isDoctorDelayed ? '!bg-amber-100 !text-amber-900 hover:!bg-amber-200' : ''}`}
++            >
++              <Hourglass className="w-4 h-4" /> Doctor Delay
++            </button>
++            <div className="relative">
++              <button onClick={() => setMoreOpen(!moreOpen)} className={btnSoft}>
++                <MoreVertical className="w-4 h-4" /> More <ChevronDown className="w-3.5 h-3.5" />
++              </button>
++              {moreOpen && (
++                <>
++                  <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
++                  <div className="absolute right-0 bottom-full mb-2 z-40 w-72 bg-white rounded-xl border border-[#e6eaf2] shadow-xl p-2 text-sm">
++                    <button onClick={() => { setMoreOpen(false); onRefresh(); }} disabled={isRefreshing} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
++                      <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh queue
+                     </button>
+-                  )
+-                )}
+-              </div>
++                    {onResetDemo && (
++                      <>
++                        <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#5b6b82]">Demo scenarios</div>
++                        <button onClick={() => { setMoreOpen(false); onResetDemo('all_booked'); }} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
++                          <RotateCcw className="w-4 h-4" /> Morning state (all booked)
++                        </button>
++                        <button onClick={() => { setMoreOpen(false); onResetDemo('active_demo'); }} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
++                          <RotateCcw className="w-4 h-4" /> Mid-day live queue
++                        </button>
++                      </>
++                    )}
++                    <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-50">
++                      <Home className="w-4 h-4" /> Demo launcher
++                    </Link>
++                  </div>
++                </>
++              )}
+             </div>
++          </div>
++        </section>
++      </main>
+ 
+-            <div className="overflow-x-auto max-h-[480px]">
+-              <table className="w-full text-left text-xs sm:text-sm">
+-                <thead className="bg-slate-100/80 text-slate-600 font-bold uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10">
+-                  <tr>
+-                    <th className="px-4 py-3">Token</th>
+-                    <th className="px-4 py-3">Patient Name</th>
+-                    <th className="px-4 py-3">Appt Time</th>
+-                    <th className="px-4 py-3">Status</th>
+-                    <th className="px-4 py-3 text-right">Queue Control</th>
+-                  </tr>
+-                </thead>
+-                <tbody className="divide-y divide-slate-100">
+-                  {filteredPatients.length > 0 ? (
+-                    filteredPatients.map((p) => {
+-                      const isCurrent = current_patient?.id === p.id;
+-                      return (
+-                        <tr
+-                          key={p.id}
+-                          className={`hover:bg-slate-50/80 transition ${
+-                            isCurrent ? 'bg-emerald-50/40 font-medium' : ''
+-                          }`}
+-                        >
+-                          <td className="px-4 py-3 font-mono font-bold text-slate-900">
+-                            <div className="flex items-center gap-1.5">
+-                              <span>{p.token}</span>
+-                              {p.is_walk_in && (
+-                                <span className="text-[9px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-700 rounded">
+-                                  W
+-                                </span>
+-                              )}
+-                            </div>
+-                          </td>
+-                          <td className="px-4 py-3 font-semibold text-slate-800">
+-                            {p.patient_name}
+-                          </td>
+-                          <td className="px-4 py-3 text-slate-500">
+-                            {p.appointment_time}
+-                          </td>
+-                          <td className="px-4 py-3">
+-                            <StatusBadge status={p.status} size="sm" />
+-                          </td>
+-                          <td className="px-4 py-3 text-right">
+-                            <div className="flex items-center justify-end gap-1.5">
+-                              {/* BOOKED -> CHECK IN */}
+-                              {p.status === 'BOOKED' && (
+-                                <button
+-                                  onClick={() => handleCheckIn(p.id, p.token, p.patient_name)}
+-                                  disabled={isUpdating}
+-                                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-hospital-600 hover:bg-hospital-700 text-white shadow-sm transition"
+-                                >
+-                                  CHECK IN
+-                                </button>
+-                              )}
+-
+-                              {/* WAITING */}
+-                              {p.status === 'WAITING' && (
+-                                <button
+-                                  onClick={handleCallNext}
+-                                  disabled={isUpdating}
+-                                  className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-hospital-50 hover:bg-hospital-100 text-hospital-800 border border-hospital-200 transition"
+-                                >
+-                                  Call Next
+-                                </button>
+-                              )}
+-
+-                              {/* CALLED */}
+-                              {p.status === 'CALLED' && (
+-                                <button
+-                                  onClick={() => handleStartConsultation(p.id, p.token)}
+-                                  disabled={isUpdating}
+-                                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
+-                                >
+-                                  Start Consultation
+-                                </button>
+-                              )}
+-
+-                              {/* IN CONSULTATION */}
+-                              {p.status === 'IN_CONSULTATION' && (
+-                                <button
+-                                  onClick={() => handleCompleteConsultation(p.id, p.token)}
+-                                  disabled={isUpdating}
+-                                  className="text-xs font-bold px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition"
+-                                >
+-                                  Complete
+-                                </button>
+-                              )}
+-
+-                              {/* COMPLETED / SKIPPED / NO SHOW -> RE-QUEUE */}
+-                              {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
+-                                <button
+-                                  onClick={() => handleRequeue(p.id, p.token)}
+-                                  disabled={isUpdating}
+-                                  className="text-[11px] font-medium text-slate-500 hover:text-slate-800 underline transition"
+-                                >
+-                                  Re-queue
+-                                </button>
+-                              )}
+-                            </div>
+-                          </td>
+-                        </tr>
+-                      );
+-                    })
+-                  ) : (
+-                    <tr>
+-                      <td colSpan={5} className="py-8 text-center text-slate-400">
+-                        No patients matching filter "{selectedFilter}"
+-                      </td>
+-                    </tr>
+-                  )}
+-                </tbody>
+-              </table>
++      {/* SETTINGS: average consultation time (existing setting) */}
++      {settingsOpen && (
++        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" onClick={() => setSettingsOpen(false)}>
++          <div className={`${card} w-full max-w-sm p-5`} onClick={(e) => e.stopPropagation()}>
++            <div className="flex items-center justify-between mb-4">
++              <h3 className="text-base font-semibold">Settings</h3>
++              <button onClick={() => setSettingsOpen(false)} aria-label="Close" className="p-1.5 rounded-lg hover:bg-slate-100"><X className="w-4 h-4" /></button>
+             </div>
++            <label htmlFor="avg-consultation-time" className={eyebrow}>Average consultation time</label>
++            <select
++              id="avg-consultation-time"
++              value={doctor.avg_consultation_time || 15}
++              onChange={(e) => handleConsultationTimeChange(Number(e.target.value))}
++              disabled={isUpdating}
++              className="mt-2 w-full rounded-xl border border-[#e6eaf2] bg-[#eef3fb] px-3 min-h-[44px] text-sm"
++            >
++              <option value={10}>10 minutes</option>
++              <option value={15}>15 minutes (Default)</option>
++              <option value={20}>20 minutes</option>
++              <option value={30}>30 minutes</option>
++            </select>
++            <p className="text-xs text-[#5b6b82] mt-2">Used to estimate patient wait times.</p>
+           </div>
+-
+         </div>
++      )}
+ 
+-      </div>
+-
+-      {/* CSV Import Modal (Section 2) */}
+       <CsvImportModal
+         isOpen={isCsvModalOpen}
+         onClose={() => setIsCsvModalOpen(false)}
+@@ -840,8 +705,6 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ overview
+           onRefresh();
+         }}
+       />
+-
+-      {/* Walk-In Modal (Section 3) */}
+       <WalkInModal
+         isOpen={isWalkInModalOpen}
+         onClose={() => setIsWalkInModalOpen(false)}

@@ -1,0 +1,1024 @@
+diff --git a/client/src/components/WaitingRoomTVDisplay.tsx b/client/src/components/WaitingRoomTVDisplay.tsx
+index 54c62b5..77421e0 100644
+--- a/client/src/components/WaitingRoomTVDisplay.tsx
++++ b/client/src/components/WaitingRoomTVDisplay.tsx
+@@ -1,301 +1,580 @@
+-import React, { useState, useEffect } from 'react';
++import React, { useState, useEffect, useMemo } from 'react';
+ import { Link } from 'react-router-dom';
+ import type { QueueOverview } from '../types';
++import { generateQr } from '../utils/qr';
+ import {
+-  Building2,
+-  Stethoscope,
+-  DoorOpen,
+-  Maximize2,
+-  Minimize2,
+-  AlertTriangle,
+-  Home,
++  Plus,
++  Info,
++  Clock,
++  User,
++  Megaphone,
++  ListOrdered,
++  ArrowRight,
++  Wifi,
++  Coffee,
++  Headset,
++  Users,
++  Repeat,
++  Volume2,
+ } from 'lucide-react';
+ 
+ interface WaitingRoomTVDisplayProps {
+   overview: QueueOverview;
+ }
+ 
++/** Design canvas (matches the reference frame) */
++const CANVAS_W = 1280;
++const CANVAS_H = 1442;
++/** Queue rows per page and seconds each page is shown (existing TV only showed 4 rows, no rotation) */
++const PAGE_SIZE = 10;
++const PAGE_ROTATE_MS = 10000;
++
++const C = {
++  navy: '#0f1b2d',
++  teal: '#1f6f63',
++  tealDeep: '#17584e',
++  muted: '#5b6b82',
++  paleBlue: '#e8effb',
++  rowBg: '#eef3fb',
++  rowNext: '#e3ebf9',
++  border: '#dbe4f1',
++};
++
++const pad2 = (n: number) => String(n).padStart(2, '0');
++
+ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ overview }) => {
+-  const [isFullscreen, setIsFullscreen] = useState(false);
+-  const [time, setTime] = useState<string>('');
+-  const [date, setDate] = useState<string>('');
++  const [now, setNow] = useState<Date>(new Date());
++  const [page, setPage] = useState(0);
++  const [scale, setScale] = useState(1);
++  const [lastUpdate, setLastUpdate] = useState<number>(Date.now());
+ 
+-  const { hospital_name, doctor, current_patient, next_patients } = overview;
++  const { hospital_name, doctor, current_patient, next_patients, stats } = overview;
+   const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
++  const delayMinutes = doctor.delay_status.match(/(\d+)/)?.[1];
++  const avgConsultation = doctor.avg_consultation_time || 15;
+ 
++  // Live clock
+   useEffect(() => {
+-    const updateTime = () => {
+-      const now = new Date();
+-      setTime(
+-        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+-      );
+-      setDate(
+-        now.toLocaleDateString('en-US', {
+-          weekday: 'long',
+-          month: 'short',
+-          day: 'numeric',
+-          year: 'numeric',
+-        })
+-      );
+-    };
+-    updateTime();
+-    const interval = setInterval(updateTime, 1000);
++    const interval = setInterval(() => setNow(new Date()), 1000);
+     return () => clearInterval(interval);
+   }, []);
+ 
+-  const toggleFullscreen = () => {
+-    if (!document.fullscreenElement) {
+-      document.documentElement.requestFullscreen().catch(() => {});
+-      setIsFullscreen(true);
+-    } else {
+-      document.exitFullscreen().catch(() => {});
+-      setIsFullscreen(false);
++  // Track when fresh data last arrived (App re-sets `overview` on every poll / websocket update)
++  useEffect(() => {
++    setLastUpdate(Date.now());
++  }, [overview]);
++
++  // Fit the fixed design canvas to whatever screen the TV has
++  useEffect(() => {
++    const fit = () => setScale(Math.min(window.innerWidth / CANVAS_W, window.innerHeight / CANVAS_H));
++    fit();
++    window.addEventListener('resize', fit);
++    return () => window.removeEventListener('resize', fit);
++  }, []);
++
++  // Fullscreen: press "F" or double-click (the old on-screen controls are not part of the TV design)
++  useEffect(() => {
++    const toggle = () => {
++      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
++      else document.exitFullscreen().catch(() => {});
++    };
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key.toLowerCase() === 'f') toggle();
++    };
++    window.addEventListener('keydown', onKey);
++    window.addEventListener('dblclick', toggle);
++    return () => {
++      window.removeEventListener('keydown', onKey);
++      window.removeEventListener('dblclick', toggle);
++    };
++  }, []);
++
++  // Pagination + automatic rotation
++  const totalPages = Math.max(1, Math.ceil(next_patients.length / PAGE_SIZE));
++  useEffect(() => {
++    if (totalPages <= 1) {
++      setPage(0);
++      return;
+     }
+-  };
++    const t = setInterval(() => setPage((p) => (p + 1) % totalPages), PAGE_ROTATE_MS);
++    return () => clearInterval(t);
++  }, [totalPages]);
++  const safePage = Math.min(page, totalPages - 1);
++  const pageStart = safePage * PAGE_SIZE;
++  const visible = next_patients.slice(pageStart, pageStart + PAGE_SIZE);
+ 
+-  return (
+-    <div className="min-h-screen bg-slate-950 text-white p-6 sm:p-10 flex flex-col justify-between select-none overflow-hidden relative font-sans">
+-      
+-      {/* Background glow effects for TV display */}
+-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-hospital-500/10 rounded-full blur-3xl pointer-events-none" />
+-
+-      {/* 1. TV TOP BAR */}
+-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-800 relative z-10">
+-        
+-        {/* Hospital Branding */}
+-        <div className="flex items-center gap-4">
+-          <div className="w-14 h-14 rounded-2xl bg-hospital-600 text-white flex items-center justify-center font-black shadow-lg shadow-hospital-500/20 text-2xl">
+-            <Building2 className="w-8 h-8" />
+-          </div>
+-          <div>
+-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase tracking-tight text-white">
+-              {hospital_name}
+-            </h1>
+-            <p className="text-xs sm:text-sm font-semibold tracking-widest text-hospital-400 uppercase mt-0.5">
+-              Outpatient Department • Waiting Area Display
+-            </p>
+-          </div>
+-        </div>
++  // Tracking QR (points at the existing /track route of this same app)
++  const trackUrl = `${window.location.origin}/track`;
++  const qr = useMemo(() => {
++    try {
++      return generateQr(trackUrl);
++    } catch {
++      return null;
++    }
++  }, [trackUrl]);
++
++  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
++  const dateStr = now
++    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
++    .toUpperCase();
++  const utcStr = `UTC ${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())}`;
++
++  const ageSec = Math.max(0, Math.floor((now.getTime() - lastUpdate) / 1000));
++  const isStale = ageSec > 20;
++  const updatedText = ageSec < 60 ? 'Updated just now' : `Updated ${Math.floor(ageSec / 60)}m ago`;
++
++  const serviceLine = (p: { is_walk_in?: boolean; appointment_time: string }) =>
++    `${p.is_walk_in ? 'Walk-in' : `Appt ${p.appointment_time}`} • ${doctor.room}`;
++
++  const estWait = (globalIdx: number) => (globalIdx === 0 ? 'Next' : `~ ${globalIdx * avgConsultation} min`);
+ 
+-        {/* Doctor, Room, Status & Clock Area */}
+-        <div className="flex flex-wrap items-center gap-4">
+-          
+-          {/* Doctor & Room */}
+-          <div className="bg-slate-900/90 border border-slate-700/80 px-4 py-2.5 rounded-2xl flex items-center gap-3">
+-            <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base">
+-              <Stethoscope className="w-5 h-5 text-hospital-400" />
+-              <span>{doctor.name}</span>
++  return (
++    <div
++      className="fixed inset-0 overflow-hidden select-none font-sans flex items-center justify-center"
++      style={{ background: '#f3f6fa', color: C.navy }}
++    >
++      <div
++        className="relative shrink-0"
++        style={{
++          width: CANVAS_W,
++          height: CANVAS_H,
++          transform: `scale(${scale})`,
++          transformOrigin: 'center center',
++          background: '#fafbfe',
++        }}
++      >
++        {/* 1. TOP NAVIGATION */}
++        <header
++          className="absolute left-0 right-0 top-0 flex items-center justify-between px-[20px]"
++          style={{ height: 65, borderBottom: `1px solid ${C.border}`, background: '#fff' }}
++        >
++          <Link to="/" className="flex items-center gap-[12px]" title="Return to launcher">
++            <div
++              className="flex items-center justify-center rounded-[4px]"
++              style={{ width: 28, height: 28, background: C.teal }}
++            >
++              <Plus className="text-white" style={{ width: 16, height: 16 }} strokeWidth={3} />
+             </div>
+-            <span className="text-slate-600">|</span>
+-            <div className="flex items-center gap-1.5 text-hospital-300 font-extrabold text-sm sm:text-base">
+-              <DoorOpen className="w-5 h-5" />
+-              <span>{doctor.room}</span>
++            <div>
++              <div className="font-bold leading-tight" style={{ fontSize: 16 }}>
++                City Care Hospital
++              </div>
++              <div className="font-semibold uppercase leading-tight" style={{ fontSize: 10, color: C.muted, letterSpacing: '0.08em' }}>
++                Patient Flow Orchestrator
++              </div>
+             </div>
+-          </div>
++          </Link>
+ 
+-          {/* Doctor Status Area */}
+-          <div className="bg-slate-900/90 border border-slate-700/80 px-4 py-2.5 rounded-2xl flex items-center gap-2.5">
+-            <span
+-              className={`w-3.5 h-3.5 rounded-full ${
+-                isDoctorDelayed
+-                  ? 'bg-amber-400 animate-ping'
+-                  : 'bg-emerald-400 animate-pulse'
+-              }`}
+-            />
+-            <div className="text-xs sm:text-sm font-black tracking-wide text-slate-200">
+-              Doctor Status:{' '}
+-              <span
+-                className={
+-                  isDoctorDelayed
+-                    ? 'text-amber-400 uppercase font-black'
+-                    : 'text-emerald-400 uppercase'
+-                }
+-              >
+-                {isDoctorDelayed ? 'DOCTOR DELAYED' : 'AVAILABLE'}
+-              </span>
++          <div
++            className="absolute left-1/2 -translate-x-1/2 rounded-[6px] px-[6px] py-[6px]"
++            style={{ background: C.paleBlue }}
++          >
++            <div
++              className="rounded-[4px] font-semibold text-white"
++              style={{ background: C.teal, fontSize: 16, padding: '6px 14px' }}
++            >
++              Waiting Room TV
+             </div>
+           </div>
+ 
+-          {/* Live Date & Time */}
+-          <div className="bg-slate-900/90 border border-slate-700/80 px-4 py-2 rounded-2xl flex flex-col items-end">
+-            <div className="text-lg font-mono font-black text-white tracking-wider">
+-              {time}
++          <div className="flex items-center gap-[16px]">
++            <div
++              className="flex items-center gap-[6px] rounded-full font-bold"
++              style={{ background: C.paleBlue, fontSize: 11, padding: '5px 10px' }}
++            >
++              <span
++                className="rounded-full"
++                style={{ width: 8, height: 8, background: isStale ? '#d97706' : C.tealDeep }}
++              />
++              {isStale ? 'Reconnecting — showing last data' : 'Live Queue Sync Active'}
+             </div>
+-            <div className="text-[10px] font-bold text-slate-400 uppercase">
+-              {date}
++            <div className="text-right leading-tight">
++              <div className="font-bold" style={{ fontSize: 13 }}>Ward Triage Center</div>
++              <div className="font-medium" style={{ fontSize: 12, color: C.muted }}>{utcStr}</div>
+             </div>
+-          </div>
+-
+-          {/* Home Link & Fullscreen Button */}
+-          <div className="flex items-center gap-2">
+-            <Link
+-              to="/"
+-              title="Return to Launcher"
+-              className="p-3 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-2xl border border-slate-700 transition"
++            <div
++              className="rounded-full flex items-center justify-center"
++              style={{ width: 34, height: 34, background: C.teal }}
+             >
+-              <Home className="w-5 h-5" />
+-            </Link>
++              <User className="text-white" style={{ width: 16, height: 16 }} />
++            </div>
++          </div>
++        </header>
+ 
+-            <button
+-              onClick={toggleFullscreen}
+-              className="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition"
+-              title="Toggle Fullscreen"
++        {/* 2. MAIN TITLE / CLOCK */}
++        <div className="absolute flex items-center justify-between" style={{ left: 48, right: 48, top: 98, height: 62 }}>
++          <div className="flex items-center gap-[16px]">
++            <div
++              className="rounded-[8px] flex items-center justify-center"
++              style={{ width: 48, height: 48, background: C.teal }}
+             >
+-              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+-            </button>
++              <div className="bg-white rounded-[4px] flex items-center justify-center" style={{ width: 22, height: 22 }}>
++                <Plus style={{ width: 16, height: 16, color: C.teal }} strokeWidth={4} />
++              </div>
++            </div>
++            <div>
++              <div className="flex items-end gap-[6px]">
++                <h1 className="font-extrabold uppercase leading-none" style={{ fontSize: 33, letterSpacing: '-0.01em' }}>
++                  {hospital_name}
++                </h1>
++                <span
++                  className="font-bold uppercase rounded-[3px]"
++                  style={{ fontSize: 10, background: C.paleBlue, color: C.tealDeep, padding: '2px 6px', letterSpacing: '0.08em', marginBottom: 3 }}
++                >
++                  Display Ward
++                </span>
++              </div>
++              <div className="font-semibold uppercase" style={{ fontSize: 12, color: C.muted, letterSpacing: '0.16em', marginTop: 8 }}>
++                Patient Queue Orchestrator • Central Lounge
++              </div>
++            </div>
+           </div>
+-        </div>
+-      </header>
+ 
+-      {/* DOCTOR DELAY ALERT BANNER (Section 9) */}
+-      {isDoctorDelayed && (
+-        <div className="my-4 p-4 rounded-2xl bg-amber-500/20 border-2 border-amber-500/60 flex items-center justify-between text-amber-300 animate-pulse relative z-10">
+-          <div className="flex items-center gap-3">
+-            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+-            <div>
+-              <span className="text-base sm:text-lg font-black tracking-wide uppercase">
+-                {doctor.name} — {doctor.room} • DOCTOR DELAYED
++          <div className="text-right">
++            <div className="flex items-center justify-end gap-[14px]">
++              <span
++                className="flex items-center gap-[6px] rounded-full font-bold uppercase"
++                style={{ fontSize: 12, background: C.paleBlue, padding: '4px 12px', letterSpacing: '0.06em' }}
++              >
++                <span className="rounded-full" style={{ width: 8, height: 8, background: C.tealDeep }} />
++                Live Feed
+               </span>
+-              <p className="text-xs sm:text-sm font-medium text-amber-200/90">
+-                Approximately 15 minutes. Please remain in the waiting area. Consultations will resume shortly.
+-              </p>
++              <span className="font-extrabold leading-none" style={{ fontSize: 34 }}>{timeStr}</span>
++            </div>
++            <div className="font-semibold" style={{ fontSize: 12, color: C.muted, letterSpacing: '0.12em', marginTop: 8 }}>
++              {dateStr}
+             </div>
+           </div>
+-          <span className="hidden sm:inline-block font-mono text-xs font-bold px-3 py-1 bg-amber-500/30 rounded-lg text-amber-300 border border-amber-500/40">
+-            OPD DELAY NOTICE
+-          </span>
+         </div>
+-      )}
+-
+-      {/* 2. MAIN TV CONTENT GRID */}
+-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 my-6 relative z-10 items-stretch flex-1">
+-        
+-        {/* LEFT / CENTER: HERO NOW SERVING SECTION (7 cols) */}
+-        <div className="lg:col-span-7 bg-gradient-to-br from-slate-900/90 via-slate-900 to-slate-950 rounded-3xl p-8 sm:p-12 border-2 border-emerald-500/40 shadow-2xl flex flex-col justify-between relative overflow-hidden">
+-          
+-          <div className="flex items-center justify-between">
+-            <div className="flex items-center gap-3">
+-              <span className="flex h-4 w-4 relative">
+-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+-                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500" />
++
++        {/* 3. OPERATIONAL ADVISORY */}
++        <div
++          className="absolute flex items-center justify-between rounded-[8px]"
++          style={{
++            left: 48,
++            right: 48,
++            top: 198,
++            height: 49,
++            background: '#e6eefb',
++            padding: '0 18px',
++            fontSize: 14,
++          }}
++        >
++          <div className="flex items-center gap-[14px] min-w-0">
++            <div
++              className="rounded-full flex items-center justify-center shrink-0"
++              style={{ width: 28, height: 28, background: '#d3deef' }}
++            >
++              <Info style={{ width: 16, height: 16, color: C.tealDeep }} />
++            </div>
++            <div className="truncate">
++              <span className="font-extrabold uppercase" style={{ color: C.tealDeep, letterSpacing: '0.06em', fontSize: 13 }}>
++                Operational Advisory:
++              </span>{' '}
++              <span className="font-bold">
++                {doctor.name} • Consultation {doctor.room}
++              </span>{' '}
++              <span style={{ color: C.muted }}>
++                —{' '}
++                {isDoctorDelayed
++                  ? `Doctor delayed${delayMinutes ? ` approximately ${delayMinutes} minutes` : ''}. Please expect a short delay.`
++                  : 'Doctor available. Consultations are running on schedule.'}
+               </span>
+-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black uppercase tracking-widest text-emerald-400">
+-                NOW SERVING
+-              </h2>
+             </div>
+-            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-black text-xs sm:text-sm px-4 py-1.5 rounded-full uppercase tracking-wider">
+-              {current_patient?.status === 'CALLED' ? 'TOKEN CALLED' : 'CONSULTATION ACTIVE'}
++          </div>
++          <div className="flex items-center gap-[6px] shrink-0 font-medium" style={{ fontSize: 12, color: C.muted }}>
++            <Clock style={{ width: 13, height: 13 }} />
++            {updatedText}
++          </div>
++        </div>
++
++        {/* 4A. NOW SERVING */}
++        <section
++          className="absolute bg-white rounded-[10px]"
++          style={{ left: 48, top: 270, width: 475, height: 429, boxShadow: '0 2px 8px rgba(15,27,45,0.06)', overflow: 'hidden' }}
++        >
++          <div
++            className="absolute inset-x-0"
++            style={{ top: 100, height: 240, background: 'linear-gradient(180deg, rgba(232,239,251,0) 0%, rgba(232,239,251,0.0) 100%)' }}
++          />
++          <div className="flex items-center justify-between" style={{ padding: '32px 32px 0 32px' }}>
++            <div className="flex items-center gap-[8px] font-extrabold uppercase" style={{ fontSize: 18, letterSpacing: '0.14em', color: C.tealDeep }}>
++              <Megaphone style={{ width: 22, height: 22 }} />
++              Now Serving
+             </div>
++            <span
++              className="font-extrabold uppercase rounded-[3px]"
++              style={{ fontSize: 10, background: '#cfe8e2', color: C.tealDeep, padding: '5px 10px', letterSpacing: '0.1em' }}
++            >
++              {current_patient?.status === 'CALLED' ? 'Active Call' : 'In Consultation'}
++            </span>
+           </div>
+ 
+-          {/* Large Hero Token & Name */}
+-          <div className="my-8 text-center sm:text-left space-y-4">
++          <div className="text-center" style={{ marginTop: 22 }}>
+             {current_patient ? (
+               <>
+-                <div className="text-7xl sm:text-8xl lg:text-9xl font-black font-mono tracking-tight text-white drop-shadow-[0_10px_20px_rgba(16,185,129,0.3)]">
++                <div className="font-extrabold" style={{ fontSize: 100, lineHeight: '86px', letterSpacing: '-0.02em' }}>
+                   {current_patient.token}
+                 </div>
+-                <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-100 tracking-tight">
++                <div className="font-semibold leading-none truncate px-[24px]" style={{ fontSize: 28, marginTop: 20 }}>
+                   {current_patient.patient_name}
+                 </div>
+-                <div className="inline-flex items-center gap-2 text-base sm:text-lg font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-5 py-2 rounded-2xl mt-4">
+-                  <DoorOpen className="w-6 h-6" />
+-                  <span>Please proceed to {doctor.room}</span>
++                <div className="font-medium uppercase" style={{ fontSize: 12, color: C.muted, letterSpacing: '0.14em', marginTop: 12 }}>
++                  {current_patient.is_walk_in ? 'Walk-in' : `Appt ${current_patient.appointment_time}`} •{' '}
++                  {current_patient.status === 'CALLED' ? 'Token called' : 'Consultation in progress'}
+                 </div>
+               </>
+             ) : (
+-              <div className="py-12 text-slate-500 text-center">
+-                <p className="text-4xl font-black text-slate-400 font-mono">--</p>
+-                <p className="text-xl font-semibold mt-2">Next Patient Calling Shortly</p>
+-              </div>
++              <>
++                <div className="font-extrabold" style={{ fontSize: 100, lineHeight: '86px', color: '#b7c2d3' }}>--</div>
++                <div className="font-semibold leading-none" style={{ fontSize: 26, marginTop: 24, color: C.muted }}>
++                  Next Patient Calling Shortly
++                </div>
++              </>
+             )}
+           </div>
+ 
+-          {/* Doctor & Room Badge at Bottom of Hero */}
+-          <div className="pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-slate-400 text-sm">
+-            <div className="flex items-center gap-2">
+-              <Stethoscope className="w-5 h-5 text-hospital-400" />
+-              <span className="font-bold text-slate-200">{doctor.name}</span>
++          <div
++            className="absolute rounded-[6px]"
++            style={{ left: 32, right: 32, top: 264, height: 134, background: C.paleBlue, padding: '20px 20px' }}
++          >
++            <div className="flex items-start justify-between">
++              <span className="font-bold uppercase" style={{ fontSize: 10, color: C.tealDeep, letterSpacing: '0.14em' }}>
++                Please proceed to
++              </span>
++              <ArrowRight style={{ width: 16, height: 16, color: C.muted }} />
+             </div>
+-            <div className="font-mono font-bold text-emerald-400">
+-              {doctor.room}
++            <div className="flex items-center justify-between" style={{ marginTop: 10 }}>
++              <span className="font-extrabold uppercase leading-none" style={{ fontSize: 30, color: C.tealDeep }}>
++                {doctor.room}
++              </span>
++              <span className="font-semibold" style={{ fontSize: 16, marginTop: 8 }}>{doctor.name}</span>
++            </div>
++            <div className="font-medium" style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>
++              Outpatient Department • Floor 1
+             </div>
+           </div>
++        </section>
+ 
+-        </div>
++        {/* 5. QUEUE STATUS */}
++        <section
++          className="absolute rounded-[10px]"
++          style={{ left: 48, top: 723, width: 475, height: 154, background: C.paleBlue, padding: '22px 24px' }}
++        >
++          <div className="flex items-center justify-between">
++            <span className="font-extrabold uppercase" style={{ fontSize: 10, color: C.muted, letterSpacing: '0.14em' }}>
++              Queue Status
++            </span>
++            <span className="flex items-center gap-[6px] font-semibold" style={{ fontSize: 11, color: C.muted }}>
++              <span className="rounded-full" style={{ width: 7, height: 7, background: C.tealDeep }} />
++              Queue updating live
++            </span>
++          </div>
++          <div className="flex" style={{ gap: 12, marginTop: 10 }}>
++            {[
++              { v: stats.waiting, l: 'Patients Waiting' },
++              { v: current_patient ? 1 : 0, l: 'Currently Serving' },
++              { v: visible.length, l: 'Patients Shown' },
++            ].map((s) => (
++              <div key={s.l} className="flex-1 bg-white rounded-[4px] text-center" style={{ height: 92, paddingTop: 6 }}>
++                <div className="font-extrabold leading-none" style={{ fontSize: 40, color: C.tealDeep }}>{pad2(s.v)}</div>
++                <div className="font-semibold uppercase" style={{ fontSize: 10, color: C.muted, letterSpacing: '0.06em', marginTop: 6, padding: '0 14px', lineHeight: 1.25 }}>
++                  {s.l}
++                </div>
++              </div>
++            ))}
++          </div>
++        </section>
+ 
+-        {/* RIGHT: NEXT PATIENTS QUEUE (5 cols) */}
+-        <div className="lg:col-span-5 bg-slate-900/80 rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-xl flex flex-col justify-between">
+-          
+-          <div>
+-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+-              <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-slate-200">
+-                NEXT
+-              </h2>
+-              <span className="text-xs font-bold uppercase tracking-wider text-hospital-400 bg-hospital-950/60 border border-hospital-800/60 px-3 py-1 rounded-full">
+-                Waiting List
+-              </span>
++        {/* 4B. NEXT IN LINE */}
++        <section
++          className="absolute bg-white rounded-[10px]"
++          style={{ left: 554, top: 270, width: 678, height: 733, boxShadow: '0 2px 8px rgba(15,27,45,0.06)' }}
++        >
++          <div className="flex items-center justify-between" style={{ padding: '30px 32px 0 32px' }}>
++            <div className="flex items-center gap-[10px] font-extrabold uppercase" style={{ fontSize: 20, letterSpacing: '0.01em' }}>
++              <ListOrdered style={{ width: 22, height: 22, color: C.tealDeep }} />
++              Next in Line
+             </div>
++            <div className="flex items-center gap-[8px]">
++              {[`${next_patients.length} in queue`, `Page ${safePage + 1} of ${totalPages}`].map((t) => (
++                <span
++                  key={t}
++                  className="font-extrabold uppercase rounded-full"
++                  style={{ fontSize: 10, background: '#d9e6f7', color: C.muted, padding: '5px 12px', letterSpacing: '0.08em' }}
++                >
++                  {t}
++                </span>
++              ))}
++            </div>
++          </div>
+ 
+-            {/* List of Next Patients in FIFO order */}
+-            <div className="mt-5 space-y-3.5">
+-              {next_patients.length > 0 ? (
+-                next_patients.slice(0, 4).map((p, idx) => (
++          <div className="absolute" style={{ left: 32, right: 32, top: 86 }}>
++            {visible.length > 0 ? (
++              visible.map((p, i) => {
++                const g = pageStart + i;
++                const isNext = g === 0;
++                const pill = isNext ? 'Next' : p.is_walk_in ? 'Walk-in' : 'Waiting';
++                return (
+                   <div
+                     key={p.id}
+-                    className="flex items-center justify-between p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 hover:border-hospital-500/40 transition group"
++                    className="flex items-center justify-between rounded-[4px]"
++                    style={{
++                      height: 58,
++                      marginBottom: 2,
++                      padding: '0 14px 0 14px',
++                      background: isNext ? C.rowNext : C.rowBg,
++                      border: `1px solid ${C.border}`,
++                    }}
+                   >
+-                    <div className="flex items-center gap-3.5">
+-                      <span className="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 text-xs font-mono font-black flex items-center justify-center">
+-                        {idx + 1}
+-                      </span>
+-                      <span className="text-2xl sm:text-3xl font-black font-mono text-hospital-400 group-hover:text-hospital-300">
++                    <div className="flex items-center min-w-0" style={{ gap: 12 }}>
++                      <div
++                        className="bg-white rounded-[4px] flex items-center justify-center font-extrabold shrink-0"
++                        style={{ width: 62, height: 40, fontSize: 21 }}
++                      >
+                         {p.token}
+-                      </span>
+-                      <span className="text-base sm:text-lg font-bold text-slate-200 pl-1">
+-                        {p.patient_name}
+-                      </span>
++                      </div>
++                      <div className="min-w-0">
++                        <div className="flex items-center" style={{ gap: 8 }}>
++                          <span
++                            className="font-extrabold uppercase rounded-[3px] shrink-0"
++                            style={{
++                              fontSize: 9,
++                              padding: '3px 7px',
++                              letterSpacing: '0.08em',
++                              background: isNext ? C.teal : '#d6def0',
++                              color: isNext ? '#fff' : C.muted,
++                            }}
++                          >
++                            {pill}
++                          </span>
++                          <span className="font-semibold truncate" style={{ fontSize: 17 }}>{p.patient_name}</span>
++                        </div>
++                        <div className="font-medium truncate" style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>
++                          {serviceLine(p)}
++                        </div>
++                      </div>
+                     </div>
+-
+-                    <div className="text-xs font-mono text-slate-400">
+-                      {p.appointment_time}
++                    <div className="text-right shrink-0">
++                      <div className="font-extrabold leading-tight" style={{ fontSize: 17, color: isNext ? C.tealDeep : C.navy }}>
++                        {estWait(g)}
++                      </div>
++                      <div className="font-medium" style={{ fontSize: 10, color: C.muted }}>Est. Call</div>
+                     </div>
+                   </div>
+-                ))
+-              ) : (
+-                <div className="py-12 text-center text-slate-500">
+-                  <p className="text-base font-semibold">No patients are currently waiting.</p>
+-                </div>
++                );
++              })
++            ) : (
++              <div className="text-center font-semibold" style={{ paddingTop: 200, fontSize: 18, color: C.muted }}>
++                No patients are currently waiting.
++              </div>
++            )}
++          </div>
++
++          {/* page progress */}
++          <div className="absolute rounded-full" style={{ left: 32, right: 32, top: 699, height: 4, background: '#e1e8f3' }}>
++            <div
++              className="rounded-full h-full"
++              style={{ width: `${((safePage + 1) / totalPages) * 100}%`, background: C.tealDeep, transition: 'width 0.6s ease' }}
++            />
++          </div>
++        </section>
++
++        {/* 6. QR / MOBILE TRACKING */}
++        <section className="absolute" style={{ left: 48, top: 1102, width: 690 }}>
++          <div className="absolute flex flex-col items-center rounded-[6px]" style={{ left: 0, top: 0, width: 136, height: 160, background: C.paleBlue, padding: '14px 0' }}>
++            <div className="bg-white" style={{ width: 92, height: 92, padding: 4 }}>
++              {qr && (
++                <svg viewBox={`-1 -1 ${qr.length + 2} ${qr.length + 2}`} width="100%" height="100%" shapeRendering="crispEdges">
++                  <rect x="-1" y="-1" width={qr.length + 2} height={qr.length + 2} fill="#fff" />
++                  {qr.map((row, y) =>
++                    row.map((dark, x) => (dark ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={C.navy} /> : null))
++                  )}
++                </svg>
+               )}
+             </div>
++            <div className="font-bold uppercase" style={{ fontSize: 10, color: C.muted, letterSpacing: '0.08em', marginTop: 14 }}>
++              Scan on phone
++            </div>
+           </div>
+ 
+-          <div className="pt-4 border-t border-slate-800/80 text-center">
+-            <p className="text-xs text-slate-400 font-medium">
+-              Please watch this screen. Your token and name will appear when called.
++          <div className="absolute" style={{ left: 160, top: 0, width: 440 }}>
++            <div className="font-extrabold uppercase" style={{ fontSize: 11, color: C.tealDeep, letterSpacing: '0.1em' }}>
++              Comfort &amp; Free Movement
++            </div>
++            <div className="font-bold" style={{ fontSize: 18, marginTop: 6 }}>Track Your Live Token Position via Mobile</div>
++            <p className="font-medium" style={{ fontSize: 13, lineHeight: 1.45, color: '#3a4a60', marginTop: 10 }}>
++              Scan the QR code or visit <span style={{ color: C.tealDeep }}>{window.location.host}/track</span> on your mobile
++              browser and enter your token. You are free to step over to the cafeteria or courtyard; your position updates
++              live on your phone.
+             </p>
++            <div className="flex items-center whitespace-nowrap" style={{ gap: 20, marginTop: 12, fontSize: 12 }}>
++              <span className="flex items-center gap-[6px] font-medium">
++                <Wifi style={{ width: 15, height: 15, color: C.tealDeep }} />
++                Free Hospital Wi-Fi: <b>CityCare_Guest</b>
++              </span>
++              <span className="flex items-center gap-[6px] font-medium">
++                <Coffee style={{ width: 15, height: 15, color: C.tealDeep }} />
++                Cafeteria: Ground Floor Atrium
++              </span>
++            </div>
+           </div>
++        </section>
+ 
+-        </div>
+-
+-      </main>
++        {/* 7. HELP DESK */}
++        <section
++          className="absolute rounded-[8px]"
++          style={{ left: 858, top: 1093, width: 374, height: 178, background: C.paleBlue, padding: '20px 18px' }}
++        >
++          <div className="flex items-center" style={{ gap: 12 }}>
++            <div className="bg-white rounded-[6px] flex items-center justify-center" style={{ width: 34, height: 34 }}>
++              <Headset style={{ width: 18, height: 18, color: C.tealDeep }} />
++            </div>
++            <div>
++              <div className="font-bold" style={{ fontSize: 13 }}>Need Assistance?</div>
++              <div className="font-medium" style={{ fontSize: 11, color: C.muted }}>Ward Help Desk • Reception B</div>
++            </div>
++          </div>
++          <p className="font-medium" style={{ fontSize: 11, lineHeight: 1.45, color: C.muted, marginTop: 12 }}>
++            If you feel acute pain or require wheelchair assistance, alert staff immediately at Counter 1 or press the
++            emergency call button.
++          </p>
++          <div className="absolute flex items-center justify-between" style={{ left: 18, right: 18, bottom: 18, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
++            <span className="font-bold uppercase" style={{ fontSize: 10, color: C.muted, letterSpacing: '0.06em' }}>Emergency Extension</span>
++            <span className="font-extrabold" style={{ fontSize: 13, color: C.tealDeep }}>Dial #202</span>
++          </div>
++        </section>
+ 
+-      {/* 3. TV BOTTOM TICKER & LIVE ANNOUNCEMENT BAR */}
+-      <footer className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-2 relative z-10">
+-        <div className="flex items-center gap-2">
+-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+-          <span className="font-semibold text-slate-300">
+-            Real-Time Live Queue Synchronization
++        {/* 8. BOTTOM STATUS BAR */}
++        <div
++          className="absolute flex items-center justify-between font-bold uppercase"
++          style={{ left: 48, right: 48, top: 1306, height: 28, fontSize: 12, color: C.tealDeep, letterSpacing: '0.1em' }}
++        >
++          <span className="flex items-center gap-[8px]">
++            <Users style={{ width: 15, height: 15 }} />
++            <span style={{ color: C.navy }}>{stats.waiting} Patients waiting in wing</span>
++          </span>
++          <span className="flex items-center gap-[8px]" style={{ color: C.muted }}>
++            <Repeat style={{ width: 13, height: 13 }} />
++            {totalPages > 1
++              ? `Page ${safePage + 1} of ${totalPages} • Rotating automatically`
++              : 'Live queue • Updating automatically'}
++          </span>
++          <span className="flex items-center gap-[8px]">
++            <Volume2 style={{ width: 15, height: 15 }} />
++            Please wait for your token to be announced
+           </span>
+-          <span className="text-slate-600">•</span>
+-          <span>City Care Hospital OPD Floor 1</span>
+-        </div>
+-        <div className="font-medium text-slate-400">
+-          For assistance or priority check-in, please visit the reception desk.
+         </div>
+-      </footer>
+ 
++        {/* 9. FOOTER */}
++        <footer
++          className="absolute left-0 right-0 bottom-0 flex items-center justify-between"
++          style={{ height: 65, padding: '0 20px', background: '#f0f4fb', fontSize: 11, color: C.muted }}
++        >
++          <span>City Care Hospital Operational Management System • Clinical Flow v4.8</span>
++          <span>FIFO Protocol • Clinical Safety Governance Standard</span>
++        </footer>
++      </div>
+     </div>
+   );
+ };
+diff --git a/client/src/utils/qr.ts b/client/src/utils/qr.ts
+new file mode 100644
+index 0000000..06c695d
+--- /dev/null
++++ b/client/src/utils/qr.ts
+@@ -0,0 +1,214 @@
++/**
++ * Minimal dependency-free QR code encoder used by the Waiting Room TV.
++ * Byte mode, error-correction level L, versions 1-5 (single RS block), up to 106 bytes.
++ * Returns a square boolean matrix (true = dark module).
++ */
++
++const DATA_CW = [0, 19, 34, 55, 80, 108];
++const EC_CW = [0, 7, 10, 15, 20, 26];
++const ALIGN = [[], [], [6, 18], [6, 22], [6, 26], [6, 30]];
++
++const EXP: number[] = new Array(512);
++const LOG: number[] = new Array(256);
++(() => {
++  let x = 1;
++  for (let i = 0; i < 255; i++) {
++    EXP[i] = x;
++    LOG[x] = i;
++    x <<= 1;
++    if (x & 0x100) x ^= 0x11d;
++  }
++  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
++})();
++
++const gfMul = (a: number, b: number) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
++
++function rsRemainder(data: number[], degree: number): number[] {
++  const gen = new Array(degree).fill(0);
++  gen[degree - 1] = 1;
++  let root = 1;
++  for (let i = 0; i < degree; i++) {
++    for (let j = 0; j < degree; j++) {
++      gen[j] = gfMul(gen[j], root);
++      if (j + 1 < degree) gen[j] ^= gen[j + 1];
++    }
++    root = gfMul(root, 2);
++  }
++  const result = new Array(degree).fill(0);
++  for (const b of data) {
++    const factor = b ^ (result.shift() as number);
++    result.push(0);
++    for (let i = 0; i < degree; i++) result[i] ^= gfMul(gen[i], factor);
++  }
++  return result;
++}
++
++const MASKS: Array<(x: number, y: number) => boolean> = [
++  (x, y) => (x + y) % 2 === 0,
++  (_x, y) => y % 2 === 0,
++  (x) => x % 3 === 0,
++  (x, y) => (x + y) % 3 === 0,
++  (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0,
++  (x, y) => ((x * y) % 2) + ((x * y) % 3) === 0,
++  (x, y) => (((x * y) % 2) + ((x * y) % 3)) % 2 === 0,
++  (x, y) => (((x + y) % 2) + ((x * y) % 3)) % 2 === 0,
++];
++
++function penalty(m: boolean[][]): number {
++  const n = m.length;
++  let score = 0;
++  for (let pass = 0; pass < 2; pass++) {
++    for (let a = 0; a < n; a++) {
++      let run = 1;
++      for (let b = 1; b < n; b++) {
++        const cur = pass ? m[b][a] : m[a][b];
++        const prev = pass ? m[b - 1][a] : m[a][b - 1];
++        if (cur === prev) {
++          run++;
++          if (run === 5) score += 3;
++          else if (run > 5) score++;
++        } else run = 1;
++      }
++    }
++  }
++  for (let y = 0; y < n - 1; y++) {
++    for (let x = 0; x < n - 1; x++) {
++      const c = m[y][x];
++      if (c === m[y][x + 1] && c === m[y + 1][x] && c === m[y + 1][x + 1]) score += 3;
++    }
++  }
++  let dark = 0;
++  for (const row of m) for (const c of row) if (c) dark++;
++  score += Math.floor(Math.abs((dark * 20) / (n * n) - 10)) * 10;
++  return score;
++}
++
++export function generateQr(text: string): boolean[][] {
++  const bytes = Array.from(new TextEncoder().encode(text));
++  let version = 0;
++  for (let v = 1; v <= 5; v++) {
++    if (4 + 8 + 8 * bytes.length <= DATA_CW[v] * 8) {
++      version = v;
++      break;
++    }
++  }
++  if (!version) throw new Error('QR text too long');
++
++  // --- Build data codewords ---
++  const bits: number[] = [];
++  const push = (val: number, len: number) => {
++    for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1);
++  };
++  push(0b0100, 4);
++  push(bytes.length, 8);
++  bytes.forEach((b) => push(b, 8));
++  const capBits = DATA_CW[version] * 8;
++  push(0, Math.min(4, capBits - bits.length));
++  while (bits.length % 8) bits.push(0);
++  const data: number[] = [];
++  for (let i = 0; i < bits.length; i += 8) {
++    let v = 0;
++    for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
++    data.push(v);
++  }
++  for (let pad = 0xec; data.length < DATA_CW[version]; pad ^= 0xec ^ 0x11) data.push(pad);
++  const codewords = data.concat(rsRemainder(data, EC_CW[version]));
++
++  // --- Function patterns ---
++  const size = 17 + 4 * version;
++  const modules: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
++  const isFn: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
++  const setFn = (x: number, y: number, dark: boolean) => {
++    modules[y][x] = dark;
++    isFn[y][x] = true;
++  };
++
++  for (let i = 0; i < size; i++) {
++    setFn(6, i, i % 2 === 0);
++    setFn(i, 6, i % 2 === 0);
++  }
++  const finder = (cx: number, cy: number) => {
++    for (let dy = -4; dy <= 4; dy++) {
++      for (let dx = -4; dx <= 4; dx++) {
++        const dist = Math.max(Math.abs(dx), Math.abs(dy));
++        const x = cx + dx;
++        const y = cy + dy;
++        if (x >= 0 && x < size && y >= 0 && y < size) setFn(x, y, dist !== 2 && dist !== 4);
++      }
++    }
++  };
++  finder(3, 3);
++  finder(size - 4, 3);
++  finder(3, size - 4);
++
++  const pos = ALIGN[version];
++  for (const ay of pos) {
++    for (const ax of pos) {
++      const overlapsFinder =
++        (ax === 6 && ay === 6) ||
++        (ax === 6 && ay === pos[pos.length - 1]) ||
++        (ay === 6 && ax === pos[pos.length - 1]);
++      if (overlapsFinder) continue;
++      for (let dy = -2; dy <= 2; dy++) {
++        for (let dx = -2; dx <= 2; dx++) {
++          setFn(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
++        }
++      }
++    }
++  }
++
++  const drawFormat = (mask: number) => {
++    const fmt = (1 << 3) | mask; // ECC level L = 01
++    let rem = fmt;
++    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
++    const b = ((fmt << 10) | rem) ^ 0x5412;
++    const bit = (i: number) => ((b >>> i) & 1) !== 0;
++    for (let i = 0; i <= 5; i++) setFn(8, i, bit(i));
++    setFn(8, 7, bit(6));
++    setFn(8, 8, bit(7));
++    setFn(7, 8, bit(8));
++    for (let i = 9; i < 15; i++) setFn(14 - i, 8, bit(i));
++    for (let i = 0; i < 8; i++) setFn(size - 1 - i, 8, bit(i));
++    for (let i = 8; i < 15; i++) setFn(8, size - 15 + i, bit(i));
++    setFn(8, size - 8, true);
++  };
++  drawFormat(0); // reserve format area so data is not placed there
++
++  // --- Place data (zig-zag) ---
++  let bitIdx = 0;
++  for (let right = size - 1; right >= 1; right -= 2) {
++    if (right === 6) right = 5;
++    for (let vert = 0; vert < size; vert++) {
++      for (let j = 0; j < 2; j++) {
++        const x = right - j;
++        const upward = ((right + 1) & 2) === 0;
++        const y = upward ? size - 1 - vert : vert;
++        if (!isFn[y][x] && bitIdx < codewords.length * 8) {
++          modules[y][x] = ((codewords[bitIdx >>> 3] >>> (7 - (bitIdx & 7))) & 1) !== 0;
++          bitIdx++;
++        }
++      }
++    }
++  }
++
++  // --- Choose best mask ---
++  let best = 0;
++  let bestScore = Infinity;
++  const applyMask = (mask: number) => {
++    for (let y = 0; y < size; y++)
++      for (let x = 0; x < size; x++) if (!isFn[y][x] && MASKS[mask](x, y)) modules[y][x] = !modules[y][x];
++  };
++  for (let m = 0; m < 8; m++) {
++    applyMask(m);
++    drawFormat(m);
++    const s = penalty(modules);
++    if (s < bestScore) {
++      bestScore = s;
++      best = m;
++    }
++    applyMask(m); // undo
++  }
++  applyMask(best);
++  drawFormat(best);
++  return modules;
++}

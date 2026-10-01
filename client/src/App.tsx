@@ -4,11 +4,9 @@ import type { QueueOverview } from './types';
 import { fetchQueueOverview, resetDemoData } from './services/api';
 import { wsClient } from './services/websocket';
 import { DemoLauncher } from './components/DemoLauncher';
-import { Navigation } from './components/Navigation';
 import { ReceptionDashboard } from './components/ReceptionDashboard';
 import { PatientTrackingPage } from './components/PatientTrackingPage';
 import { WaitingRoomTVDisplay } from './components/WaitingRoomTVDisplay';
-import { AlertCircle } from 'lucide-react';
 
 export function App() {
   const [overview, setOverview] = useState<QueueOverview | null>(null);
@@ -83,32 +81,17 @@ export function App() {
         <Route
           path="/reception"
           element={
-            <div className="min-h-screen bg-slate-50 text-slate-900">
-              <Navigation
-                onRefresh={() => loadData(false)}
+            overview ? (
+              <ReceptionDashboard
+                overview={overview}
+                onRefresh={() => loadData(true)}
                 onResetDemo={handleResetDemo}
                 isRefreshing={isRefreshing}
+                error={error}
               />
-              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {error && (
-                  <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>{error}</span>
-                    </div>
-                    <button
-                      onClick={() => loadData(false)}
-                      className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-                {overview && (
-                  <ReceptionDashboard overview={overview} onRefresh={() => loadData(true)} />
-                )}
-              </main>
-            </div>
+            ) : (
+              <div className="min-h-screen flex items-center justify-center text-slate-500">Loading...</div>
+            )
           }
         />
 
