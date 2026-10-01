@@ -8,6 +8,41 @@ import { ReceptionDashboard } from './components/ReceptionDashboard';
 import { PatientTrackingPage } from './components/PatientTrackingPage';
 import { WaitingRoomTVDisplay } from './components/WaitingRoomTVDisplay';
 
+const FALLBACK_OVERVIEW: QueueOverview = {
+  hospital_name: 'City Care Hospital',
+  doctor: {
+    id: 'dr-kumar',
+    name: 'Dr. Kumar',
+    room: 'Room 2',
+    delay_status: 'Available',
+    avg_consultation_time: 15,
+  },
+  current_patient: null,
+  next_patients: [],
+  all_patients: [],
+  stats: {
+    total: 0,
+    booked: 0,
+    checked_in: 0,
+    waiting: 0,
+    in_consultation: 0,
+    completed: 0,
+    skipped: 0,
+    no_show: 0,
+    walk_ins: 0,
+    avg_waiting_time_minutes: 15,
+  },
+  summary: {
+    total_appointments: 0,
+    checked_in_count: 0,
+    completed_count: 0,
+    no_show_count: 0,
+    skipped_count: 0,
+    walk_ins_count: 0,
+    avg_waiting_time_minutes: 15,
+  },
+};
+
 export function App() {
   const [overview, setOverview] = useState<QueueOverview | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -22,7 +57,7 @@ export function App() {
       setError(null);
     } catch (err: any) {
       console.error('Error fetching overview:', err);
-      setError(err.message || 'Failed to connect to backend server');
+      setError(err.message || 'Unable to connect to backend server. Please verify the server is running.');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -59,7 +94,9 @@ export function App() {
     }
   };
 
-  if (loading && !overview) {
+  const activeOverview = overview || FALLBACK_OVERVIEW;
+
+  if (loading && !overview && !error) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white">
         <div className="w-12 h-12 border-4 border-hospital-500 border-t-transparent rounded-full animate-spin mb-4" />
@@ -81,32 +118,20 @@ export function App() {
         <Route
           path="/reception"
           element={
-            overview ? (
-              <ReceptionDashboard
-                overview={overview}
-                onRefresh={() => loadData(true)}
-                onResetDemo={handleResetDemo}
-                isRefreshing={isRefreshing}
-                error={error}
-              />
-            ) : (
-              <div className="min-h-screen flex items-center justify-center text-slate-500">Loading...</div>
-            )
+            <ReceptionDashboard
+              overview={activeOverview}
+              onRefresh={() => loadData(false)}
+              onResetDemo={handleResetDemo}
+              isRefreshing={isRefreshing}
+              error={error}
+            />
           }
         />
 
         {/* 3. WAITING ROOM TV DISPLAY ROUTE: /display (Section 5) */}
         <Route
           path="/display"
-          element={
-            overview ? (
-              <WaitingRoomTVDisplay overview={overview} />
-            ) : (
-              <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-                Loading Display...
-              </div>
-            )
-          }
+          element={<WaitingRoomTVDisplay overview={activeOverview} />}
         />
 
         {/* 4. PATIENT TRACKING ROUTE: /track/:token & /track (Section 6) */}

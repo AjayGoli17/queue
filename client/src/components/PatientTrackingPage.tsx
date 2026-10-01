@@ -22,35 +22,6 @@ interface PatientTrackingPageProps {
   initialToken?: string;
 }
 
-/** Design width of the mobile reference. The UI stays this wide on desktop and is centred. */
-const PHONE_WIDTH = 420;
-
-const C = {
-  navy: '#0f1b2d',
-  teal: '#1f6f63',
-  tealSoft: '#e3f3f0',
-  muted: '#5b6b82',
-  paleBlue: '#e8effb',
-  panelBlue: '#eef3fb',
-  border: '#e6ebf4',
-  page: '#f4f6fb',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 'var(--pt-r)',
-  border: `1px solid ${C.border}`,
-  boxShadow: '0 1px 2px rgba(15,27,45,0.04), 0 4px 14px rgba(15,27,45,0.04)',
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: C.muted,
-};
-
 type SwitcherState = 'waiting' | 'next' | 'called' | 'consult' | 'delayed' | 'completed';
 
 const SWITCHER_ROWS: { key: SwitcherState; label: string }[][] = [
@@ -216,97 +187,38 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
   const servingRoom = d?.room ?? '';
   const youSub = d?.status === 'WAITING' ? (d.patients_ahead === 0 ? 'Ready' : 'Waiting') : (status === 'CALLED' ? 'Go in' : 'Ready');
 
-  const posCell = (
-    label: string,
-    token: string | null,
-    sub: string,
-    emphasis = false,
-  ) => (
-    <div
-      style={{
-        flex: 1,
-        textAlign: 'center',
-        padding: 'var(--pt-cell-y) 4px',
-        borderRadius: 'var(--pt-r-sm)',
-        background: emphasis ? C.teal : 'transparent',
-        color: emphasis ? '#fff' : C.navy,
-      }}
-    >
-      <div style={{ ...labelStyle, fontSize: 10, color: emphasis ? 'rgba(255,255,255,0.8)' : C.muted }}>{label}</div>
-      <div style={{ fontSize: 'var(--pt-pos)', fontWeight: 800, fontFamily: 'inherit', lineHeight: 1.15, marginTop: 'var(--pt-tiny)' }}>
-        {token || '—'}
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 500, marginTop: 2, color: emphasis ? 'rgba(255,255,255,0.85)' : C.muted }}>
-        {sub}
-      </div>
-    </div>
-  );
-
-  const arrow = (
-    <div style={{ display: 'flex', alignItems: 'center', color: '#b4c0d4' }}>
-      <ArrowRight size={16} />
-    </div>
-  );
-
   const progressSteps = ['Checked in', 'Waiting', 'Called'];
 
   return (
-    // Outer wrapper: light background, content stays phone-width and centred on any viewport
-    <div className="pt-page" style={{ width: '100%', background: C.page, minHeight: '100%' }}>
-      <div
-        style={{
-          width: '100%',
-          maxWidth: PHONE_WIDTH,
-          margin: '0 auto',
-          padding: '0 var(--pt-cx)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--pt-g)',
-          color: C.navy,
-          boxSizing: 'border-box',
-          overflowX: 'hidden',
-        }}
-      >
-        {/* 1. HOSPITAL HEADER */}
-        <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 'var(--pt-ico)', height: 'var(--pt-ico)', borderRadius: 'var(--pt-r-sm)', background: C.paleBlue,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.teal, flexShrink: 0,
-            }}
-          >
-            <Cross size={20} strokeWidth={2.5} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 'var(--pt-h1)', fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {d?.hospital_name || 'City Care Hospital'}
+    <div className="pt-shell">
+      <div className="pt-page">
+        {/* 1. APP HEADER */}
+        <header className="pt-header">
+          <div className="pt-header-brand">
+            <div className="pt-logo-icon">
+              <Cross size={18} strokeWidth={2.5} />
             </div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Patient Live Queue</div>
+            <div>
+              <div className="pt-hospital-name">{d?.hospital_name || 'City Care Hospital'}</div>
+              <div className="pt-hospital-sub">Patient Live Queue</div>
+            </div>
           </div>
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, background: C.tealSoft, color: C.teal,
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', padding: '5px 10px', borderRadius: 999,
-            }}
-          >
-            <span className="animate-pulse" style={{ width: 7, height: 7, borderRadius: 999, background: C.teal }} />
-            LIVE
+          <div className="pt-header-actions">
+            <div className="pt-live-badge">
+              <span className="pt-live-dot animate-pulse" />
+              LIVE
+            </div>
+            <div className="pt-avatar">
+              <UserRound size={16} />
+            </div>
           </div>
-          <div
-            style={{
-              width: 'var(--pt-avatar)', height: 'var(--pt-avatar)', borderRadius: 999, background: C.paleBlue, color: C.muted,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}
-          >
-            <UserRound size={18} />
-          </div>
-        </div>
+        </header>
 
-        {/* TOKEN LOOKUP — only when there is no result to show (preserves existing token search) */}
+        {/* TOKEN LOOKUP — only when there is no result to show */}
         {!d && (
-          <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)' }}>
-            <div style={{ ...labelStyle, marginBottom: 'var(--pt-sm)' }}>Enter your token</div>
-            <div style={{ display: 'flex', gap: 8 }}>
+          <div className="pt-lookup-card">
+            <div className="pt-lookup-label">Enter your token</div>
+            <div className="pt-lookup-row">
               <input
                 type="text"
                 value={tokenInput}
@@ -314,20 +226,14 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 placeholder="e.g. A07"
                 maxLength={6}
-                style={{
-                  flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 'var(--pt-r-sm)', border: `1px solid ${C.border}`,
-                  background: C.panelBlue, fontSize: 18, fontWeight: 700, textAlign: 'center', textTransform: 'uppercase', color: C.navy,
-                }}
+                className="pt-lookup-input"
               />
               <button
                 onClick={() => handleSearch()}
                 disabled={loading}
-                style={{
-                  padding: '0 16px', minHeight: 44, borderRadius: 'var(--pt-r-sm)', background: C.teal, color: '#fff', fontWeight: 700, fontSize: 12,
-                  display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.6 : 1,
-                }}
+                className="pt-lookup-btn"
               >
-                {loading ? <RotateCw size={16} className="animate-spin" /> : <Search size={16} />}
+                {loading ? <RotateCw size={14} className="animate-spin" /> : <Search size={14} />}
                 CHECK
               </button>
             </div>
@@ -335,162 +241,150 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         )}
 
         {errorMessage && (
-          <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', background: '#fff1f2', borderColor: '#fecdd3', color: '#9f1239', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
+          <div className="pt-error-banner">
             {errorMessage}
           </div>
         )}
 
         {d && (
           <>
-            {/* 2. DEPARTMENT / UPDATE ROW */}
-            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <Briefcase size={16} color={C.teal} style={{ flexShrink: 0 }} />
-                <span style={{ ...labelStyle, color: C.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  General Outpatient Triage
-                </span>
+            {/* 2. DEPARTMENT & UPDATE STRIP */}
+            <div className="pt-dept-row">
+              <div className="pt-dept-left">
+                <Briefcase size={14} className="pt-dept-icon" />
+                <span className="pt-dept-title">General Outpatient Triage</span>
               </div>
-              <span style={{ fontSize: 12, color: C.muted, whiteSpace: 'nowrap' }}>{timeAgo(lastUpdated, now)}</span>
+              <span className="pt-dept-time">{timeAgo(lastUpdated, now)}</span>
             </div>
 
-            {/* 3. YOUR TOKEN CARD */}
-            <div style={{ ...cardStyle, padding: 'var(--pt-tc-t) var(--pt-cx) var(--pt-tc-b)', textAlign: 'center' }}>
-              <div style={labelStyle}>Your Token</div>
-              <div style={{ fontSize: 'var(--pt-tok)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', marginTop: 'var(--pt-tiny)' }}>
-                {d.token}
+            {/* 3. HERO TOKEN SECTION (DOMINANT VISUAL ELEMENT) */}
+            <div className="pt-hero-section">
+              <div className="pt-hero-label">YOUR TOKEN</div>
+              <div className="pt-hero-token">{d.token}</div>
+              <div className={`pt-status-pill pt-status-${switcherState || 'waiting'}`}>
+                <span className="pt-status-dot" />
+                <span>{statusPill}</span>
               </div>
-              <div
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8, background: C.tealSoft, color: C.teal,
-                  fontSize: 'var(--pt-pill)', fontWeight: 700, padding: 'var(--pt-pill-y) 16px', borderRadius: 999, marginTop: 'var(--pt-sm)',
-                }}
-              >
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: C.teal }} />
-                {statusPill}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 'var(--pt-md)', fontSize: 13, color: C.muted }}>
-                <Clock size={15} />
-                <span>{waitLine}</span>
+              <div className="pt-hero-sub">
+                {status === 'CALLED' ? (
+                  <span className="pt-hero-direction">
+                    Please proceed to <strong>{d.doctor_name}</strong> · <strong>{d.room}</strong>
+                  </span>
+                ) : (
+                  <span className="pt-hero-wait">
+                    <Clock size={14} />
+                    <span>{waitLine}</span>
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* 4. LIVE QUEUE POSITION */}
-            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--pt-sm)' }}>
-                <span style={labelStyle}>Live Queue Position</span>
-                <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>{d.room} Corridor</span>
+            {/* 4. LIVE QUEUE POSITION (AIRY 3-COLUMN STRUCTURE) */}
+            <div className="pt-queue-pos-card">
+              <div className="pt-card-header">
+                <span className="pt-card-title">LIVE QUEUE POSITION</span>
+                <span className="pt-card-sub">{d.room} Corridor</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'stretch', gap: 2 }}>
-                {posCell('Serving', d.current_serving_token, d.current_serving_token ? servingRoom : 'None active')}
-                {arrow}
-                {posCell('Next', nextToken, nextToken ? servingRoom : '—')}
-                {arrow}
-                {posCell('You', d.token, youSub, true)}
+              <div className="pt-pos-grid">
+                <div className="pt-pos-col">
+                  <span className="pt-pos-label">SERVING</span>
+                  <span className="pt-pos-token">{d.current_serving_token || '—'}</span>
+                  <span className="pt-pos-sub">{d.current_serving_token ? servingRoom : 'None active'}</span>
+                </div>
+                <div className="pt-pos-arrow"><ArrowRight size={14} /></div>
+                <div className="pt-pos-col">
+                  <span className="pt-pos-label">NEXT</span>
+                  <span className="pt-pos-token">{nextToken || '—'}</span>
+                  <span className="pt-pos-sub">{nextToken ? servingRoom : '—'}</span>
+                </div>
+                <div className="pt-pos-arrow"><ArrowRight size={14} /></div>
+                <div className="pt-pos-col pt-pos-you">
+                  <span className="pt-pos-label">YOU</span>
+                  <span className="pt-pos-token">{d.token}</span>
+                  <span className="pt-pos-sub">{youSub}</span>
+                </div>
               </div>
-              <div
-                style={{
-                  marginTop: 'var(--pt-md)', background: C.panelBlue, borderRadius: 'var(--pt-r-sm)', padding: 'var(--pt-msg-y) 14px',
-                  fontSize: 13, color: C.navy, fontWeight: 500, lineHeight: 1.4, textAlign: 'center',
-                }}
-              >
+              <div className="pt-pos-msg">
                 {d.message}
               </div>
             </div>
 
-            {/* 5. QUEUE PROGRESS ROW */}
-            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center' }}>
+            {/* 5. QUEUE PROGRESS STRIP */}
+            <div className="pt-progress-strip">
               {progressSteps.map((label, i) => {
                 const done = i < progressIndex;
                 const current = i === progressIndex;
                 return (
                   <React.Fragment key={label}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div
-                        style={{
-                          width: 22, height: 22, borderRadius: 999, flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: done || current ? C.teal : '#fff',
-                          border: done || current ? `2px solid ${C.teal}` : '2px solid #cfd8e6',
-                          color: '#fff',
-                          boxShadow: current ? `0 0 0 4px ${C.tealSoft}` : 'none',
-                        }}
-                      >
-                        {done && <Check size={13} strokeWidth={3} />}
-                        {current && <span style={{ width: 6, height: 6, borderRadius: 999, background: '#fff' }} />}
+                    <div className={`pt-step-item ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`}>
+                      <div className="pt-step-icon">
+                        {done ? <Check size={11} strokeWidth={3} /> : current ? <span className="pt-step-dot" /> : null}
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: current ? 700 : 500, color: current ? C.navy : C.muted, whiteSpace: 'nowrap' }}>
-                        {label}
-                      </span>
+                      <span className="pt-step-label">{label}</span>
                     </div>
                     {i < progressSteps.length - 1 && (
-                      <div style={{ flex: 1, height: 2, margin: '0 8px', background: i < progressIndex ? C.teal : '#dbe3ef', borderRadius: 2 }} />
+                      <div className={`pt-step-line ${i < progressIndex ? 'is-done' : ''}`} />
                     )}
                   </React.Fragment>
                 );
               })}
             </div>
 
-            {/* 6. APPOINTMENT CARD */}
-            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div
-                style={{
-                  width: 'var(--pt-ico)', height: 'var(--pt-ico)', borderRadius: 'var(--pt-r-sm)', background: C.paleBlue, color: C.teal,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}
-              >
-                <CalendarDays size={20} />
+            {/* 6. APPOINTMENT ROW */}
+            <div className="pt-appointment-row">
+              <div className="pt-appt-icon">
+                <CalendarDays size={18} />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--pt-h2)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {d.appointment_time || (d.is_walk_in ? 'Walk-in' : '—')} • {d.doctor_name}
+              <div className="pt-appt-info">
+                <div className="pt-appt-title">
+                  {d.appointment_time || (d.is_walk_in ? 'Walk-in' : '—')} · {d.doctor_name}
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-                  {d.is_walk_in ? 'Walk-in visit' : 'Scheduled appointment'} • {d.room}
+                <div className="pt-appt-sub">
+                  {d.is_walk_in ? 'Walk-in visit' : 'Scheduled appointment'} · {d.room}
                 </div>
               </div>
-              <ChevronRight size={18} color="#9aa7bd" />
+              <ChevronRight size={16} className="pt-chevron" />
             </div>
 
-            {/* 7. NOTIFICATION / RECEPTION ROW */}
-            <div style={{ display: 'flex', gap: 'var(--pt-g)' }}>
-              <div style={{ ...cardStyle, flex: 1, padding: 'var(--pt-cy) var(--pt-nx)', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 'var(--pt-ico-sm)', height: 'var(--pt-ico-sm)', borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <MessageSquare size={17} />
+            {/* 7. NOTIFICATION & RECEPTION ACTIONS */}
+            <div className="pt-actions-row">
+              <div className="pt-action-btn">
+                <div className="pt-action-icon">
+                  <MessageSquare size={14} />
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>SMS updates</div>
-                  <div style={{ fontSize: 11, color: C.muted }}>Registered number</div>
+                <div className="pt-action-text">
+                  <div className="pt-action-title">SMS updates</div>
+                  <div className="pt-action-sub">Registered number</div>
                 </div>
               </div>
-              <div style={{ ...cardStyle, flex: 1, padding: 'var(--pt-cy) var(--pt-nx)', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 'var(--pt-ico-sm)', height: 'var(--pt-ico-sm)', borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Headset size={17} />
+              <div className="pt-action-btn">
+                <div className="pt-action-icon">
+                  <Headset size={14} />
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Reception</div>
-                <ArrowRight size={15} color="#9aa7bd" />
+                <div className="pt-action-text">
+                  <div className="pt-action-title">Reception</div>
+                  <div className="pt-action-sub">Help desk</div>
+                </div>
+                <ArrowRight size={13} className="pt-action-arrow" />
               </div>
             </div>
 
-            {/* 8. CLINICAL STATE SWITCHER (read-only; reflects the patient's real state) */}
-            <div style={{ background: C.panelBlue, borderRadius: 'var(--pt-r)', padding: 'var(--pt-cy) var(--pt-cx)', border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--pt-sm)' }}>
-                <span style={labelStyle}>Clinical State Switcher</span>
-                <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>Patient Mode</span>
+            {/* 8. CLINICAL STATE SWITCHER (SUBORDINATE & COMPACT) */}
+            <div className="pt-switcher-panel">
+              <div className="pt-switcher-header">
+                <span className="pt-switcher-title">CLINICAL STATE SWITCHER</span>
+                <span className="pt-switcher-badge">Patient Mode</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--pt-gs)' }}>
+              <div className="pt-switcher-grid">
                 {SWITCHER_ROWS.map((row, r) => (
-                  <div key={r} style={{ display: 'flex', gap: 'var(--pt-gs)' }}>
+                  <div key={r} className="pt-switcher-row">
                     {row.map((s) => {
                       const active = switcherState === s.key;
                       return (
                         <div
                           key={s.key}
                           aria-current={active ? 'true' : undefined}
-                          style={{
-                            flex: 1, textAlign: 'center', padding: 'var(--pt-btn-y) 4px', borderRadius: 'var(--pt-r-sm)', fontSize: 12.5, fontWeight: 600,
-                            background: active ? C.teal : '#fff', color: active ? '#fff' : C.navy,
-                            border: `1px solid ${active ? C.teal : C.border}`, whiteSpace: 'nowrap',
-                          }}
+                          className={`pt-switcher-btn ${active ? 'is-active' : ''}`}
                         >
                           {s.label}
                         </div>

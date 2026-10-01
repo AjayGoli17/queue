@@ -49,3 +49,12 @@ CREATE INDEX IF NOT EXISTS idx_patients_status ON patients(status);
 CREATE INDEX IF NOT EXISTS idx_patients_doctor ON patients(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_patients_checked_in_at ON patients(checked_in_at);
 CREATE INDEX IF NOT EXISTS idx_queues_doctor ON queues(doctor_id);
+
+-- Default Doctor & Queue
+INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
+VALUES ('dr-kumar', 'Dr. Kumar', 'Room 2', 'Available', 15)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO queues (doctor_id, current_patient_id, queue_state)
+VALUES ('dr-kumar', NULL, 'ACTIVE')
+ON CONFLICT DO NOTHING;

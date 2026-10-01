@@ -147,11 +147,15 @@ router.post('/queue/walk-in', async (req: Request, res: Response) => {
 router.post('/queue/import-appointments', async (req: Request, res: Response) => {
   try {
     const { appointments, doctor_id } = req.body;
+    console.log('[CSV IMPORT API] request received for doctor:', doctor_id);
     if (!Array.isArray(appointments) || appointments.length === 0) {
-      return res.status(400).json({ error: 'Unable to import this file. Please check the required columns.' });
+      console.warn('[CSV IMPORT API] validation failure: empty or non-array appointments');
+      return res.status(400).json({ error: 'No appointments provided for import.' });
     }
     const doctorId = doctor_id || 'dr-kumar';
+    console.log('[CSV IMPORT API] parsed appointments count:', appointments.length);
     const result = await QueueService.importAppointments(appointments, doctorId);
+    console.log('[CSV IMPORT API] database result: successfully inserted', result.count, 'appointments');
     wsService.broadcastQueueUpdate(doctorId);
     return res.json({
       success: true,
@@ -160,8 +164,8 @@ router.post('/queue/import-appointments', async (req: Request, res: Response) =>
       imported: result.imported,
     });
   } catch (error: any) {
-    console.error('Error importing appointments:', error);
-    return res.status(500).json({ error: 'Unable to import this file. Please check the required columns.' });
+    console.error('[CSV IMPORT API] Error importing appointments:', error);
+    return res.status(500).json({ error: error.message || 'Failed to import appointments.' });
   }
 });
 
@@ -249,6 +253,32 @@ router.post('/demo/reset', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error resetting demo state:', error);
     return res.status(500).json({ error: 'Failed to reset demo state.' });
+  }
+});
+
+// DELETE /api/queue/all (Delete All Appointments)
+router.delete('/queue/all', async (req: Request, res: Response) => {
+  try {
+    const doctorId = (req.query.doctor_id as string) || (req.body?.doctor_id as string);
+    const result = await QueueService.deleteAllPatients(doctorId);
+    wsService.broadcastQueueUpdate(doctorId || 'dr-kumar');
+    return res.json({ success: true, count: result.count, message: `All ${result.count} appointments removed.` });
+  } catch (error: any) {
+    console.error('Error deleting all appointments:', error);
+    return res.status(500).json({ error: 'Failed to delete appointments.' });
+  }
+});
+
+// POST /api/queue/clear (Alternative clear endpoint)
+router.post('/queue/clear', async (req: Request, res: Response) => {
+  try {
+    const doctorId = (req.body?.doctor_id as string) || (req.query.doctor_id as string);
+    const result = await QueueService.deleteAllPatients(doctorId);
+    wsService.broadcastQueueUpdate(doctorId || 'dr-kumar');
+    return res.json({ success: true, count: result.count, message: `All ${result.count} appointments removed.` });
+  } catch (error: any) {
+    console.error('Error clearing appointments:', error);
+    return res.status(500).json({ error: 'Failed to clear appointments.' });
   }
 });
 

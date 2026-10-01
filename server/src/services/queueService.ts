@@ -7,10 +7,13 @@ export class QueueService {
 
     // 1. Get Doctor
     const docRes = await db.query<Doctor>('SELECT * FROM doctors WHERE id = $1', [doctorId]);
-    if (docRes.rows.length === 0) {
-      return null;
-    }
-    const doctor = docRes.rows[0];
+    const doctor: Doctor = docRes.rows[0] || {
+      id: doctorId,
+      name: 'Dr. Kumar',
+      room: 'Room 2',
+      delay_status: 'Available',
+      avg_consultation_time: 15,
+    };
 
     // 2. Get Queue
     const queueRes = await db.query('SELECT * FROM queues WHERE doctor_id = $1 LIMIT 1', [doctorId]);
@@ -404,6 +407,14 @@ export class QueueService {
         if (num > maxNum) maxNum = num;
       }
     }
+    // Ensure doctor exists in doctors table
+    await db.query(
+      `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [doctorId, 'Dr. Kumar', 'Room 2', 'Available', 15]
+    );
+
     const nextTokenNumber = maxNum + 1;
     const newToken = `A${nextTokenNumber < 10 ? '0' + nextTokenNumber : nextTokenNumber}`;
 
@@ -424,10 +435,17 @@ export class QueueService {
   ): Promise<{ count: number; imported: Patient[] }> {
     const db = await getDatabase();
 
-    // Find highest token
+    // Ensure doctor exists in doctors table
+    await db.query(
+      `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [doctorId, 'Dr. Kumar', 'Room 2', 'Available', 15]
+    );
+
+    // Find highest token across ALL patients
     const tokenRes = await db.query<Patient>(
-      "SELECT token FROM patients WHERE doctor_id = $1 ORDER BY id DESC",
-      [doctorId]
+      "SELECT token FROM patients ORDER BY id DESC"
     );
 
     let maxNum = 0;
@@ -518,5 +536,23 @@ export class QueueService {
     }
 
     return updatedPatient;
+  }
+
+  // 11. Delete all appointments/patients from today's queue
+  static async deleteAllPatients(doctorId?: string): Promise<{ count: number }> {
+    const db = await getDatabase();
+    if (doctorId && doctorId !== 'ALL') {
+      const countRes = await db.query('SELECT COUNT(*) FROM patients WHERE doctor_id = $1', [doctorId]);
+      const count = parseInt(countRes.rows[0]?.count || '0', 10);
+      await db.query('DELETE FROM patients WHERE doctor_id = $1', [doctorId]);
+      await db.query('UPDATE queues SET current_patient_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE doctor_id = $1', [doctorId]);
+      return { count };
+    } else {
+      const countRes = await db.query('SELECT COUNT(*) FROM patients');
+      const count = parseInt(countRes.rows[0]?.count || '0', 10);
+      await db.query('DELETE FROM patients');
+      await db.query('UPDATE queues SET current_patient_id = NULL, updated_at = CURRENT_TIMESTAMP');
+      return { count };
+    }
   }
 }

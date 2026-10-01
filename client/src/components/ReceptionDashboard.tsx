@@ -1,40 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { QueueOverview, PatientStatus, Patient } from '../types';
 import { CsvImportModal } from './CsvImportModal';
 import { WalkInModal } from './WalkInModal';
 import {
-  Sparkles,
   Cross,
-  Monitor,
-  LayoutPanelLeft,
-  Settings,
-  Megaphone,
-  CheckCircle2,
-  CalendarDays,
-  UserPlus,
-  Search,
-  MoreHorizontal,
-  MoreVertical,
-  ChevronDown,
-  Stethoscope,
+  Plus,
   FileUp,
-  Hourglass,
-  RotateCw,
+  Search,
+  Monitor,
+  Settings,
+  ChevronDown,
   RotateCcw,
-  Home,
+  RotateCw,
+  Sparkles,
   X,
+  User,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
-  checkInPatient,
-  callNextPatient,
-  startConsultation,
   completeConsultation,
-  skipPatient,
-  noShowPatient,
   updateDoctorStatus,
   updateDoctorAvgConsultationTime,
   updatePatientStatus,
+  deleteAllAppointments,
 } from '../services/api';
 
 interface ReceptionDashboardProps {
@@ -45,53 +35,40 @@ interface ReceptionDashboardProps {
   error?: string | null;
 }
 
-type FilterCategory = 'ALL' | 'BOOKED' | 'WAITING' | 'CALLED' | 'COMPLETED' | 'MISSED' | 'WALK_IN';
-
-const FILTERS: { key: FilterCategory; label: string }[] = [
-  { key: 'ALL', label: 'All' },
-  { key: 'BOOKED', label: 'Booked' },
-  { key: 'WAITING', label: 'Waiting' },
-  { key: 'CALLED', label: 'Called' },
-  { key: 'COMPLETED', label: 'Completed' },
-  { key: 'MISSED', label: 'No-show' },
-  { key: 'WALK_IN', label: 'Walk-ins' },
-];
-
-const matchesFilter = (p: Patient, f: FilterCategory): boolean => {
-  switch (f) {
-    case 'ALL': return true;
-    case 'BOOKED': return p.status === 'BOOKED';
-    case 'WAITING': return p.status === 'WAITING';
-    case 'CALLED': return p.status === 'CALLED' || p.status === 'IN_CONSULTATION';
-    case 'COMPLETED': return p.status === 'COMPLETED';
-    case 'MISSED': return p.status === 'NO_SHOW' || p.status === 'SKIPPED';
-    case 'WALK_IN': return p.is_walk_in === true;
-  }
-};
+type FilterStatus =
+  | 'ALL'
+  | 'BOOKED'
+  | 'CHECKED_IN'
+  | 'WAITING'
+  | 'CALLED'
+  | 'IN_CONSULTATION'
+  | 'COMPLETED'
+  | 'MISSED'
+  | 'WALK_IN';
 
 const fmtTime = (iso?: string | null): string =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 
 const STATUS_PILL: Record<PatientStatus, { label: string; cls: string }> = {
-  BOOKED: { label: 'Booked', cls: 'bg-slate-100 text-slate-600' },
-  CHECKED_IN: { label: 'Checked in', cls: 'bg-sky-50 text-sky-700' },
-  WAITING: { label: 'Waiting', cls: 'bg-[#e3f1ee] text-[#2a6a60]' },
-  CALLED: { label: 'Called', cls: 'bg-blue-50 text-blue-700' },
-  IN_CONSULTATION: { label: 'In consultation', cls: 'bg-emerald-50 text-emerald-700' },
-  COMPLETED: { label: 'Completed', cls: 'bg-slate-100 text-slate-500' },
-  SKIPPED: { label: 'Skipped', cls: 'bg-amber-50 text-amber-700' },
-  NO_SHOW: { label: 'No-show', cls: 'bg-rose-50 text-rose-700' },
+  BOOKED: { label: 'Booked', cls: 'bg-slate-100 text-slate-600 border border-slate-200/80' },
+  CHECKED_IN: { label: 'Checked In', cls: 'bg-sky-50 text-sky-700 border border-sky-200/80' },
+  WAITING: { label: 'Waiting', cls: 'bg-teal-50 text-teal-800 border border-teal-200/80' },
+  CALLED: { label: 'Called', cls: 'bg-blue-50 text-blue-700 border border-blue-200/80 font-bold' },
+  IN_CONSULTATION: { label: 'In Consultation', cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold' },
+  COMPLETED: { label: 'Completed', cls: 'bg-slate-100 text-slate-500 border border-slate-200/80' },
+  SKIPPED: { label: 'Skipped', cls: 'bg-amber-50 text-amber-800 border border-amber-200/80' },
+  NO_SHOW: { label: 'No-show', cls: 'bg-rose-50 text-rose-700 border border-rose-200/80' },
 };
 
-const StatusPill: React.FC<{ status: PatientStatus }> = ({ status }) => (
-  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${STATUS_PILL[status].cls}`}>
-    <span className="w-1.5 h-1.5 rounded-full bg-current" />
-    {STATUS_PILL[status].label}
-  </span>
-);
-
-const card = 'bg-white rounded-2xl border border-[#e6eaf2] shadow-[0_1px_2px_rgba(15,27,45,0.04),0_6px_16px_rgba(15,27,45,0.04)]';
-const eyebrow = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-[#5b6b82]';
+const StatusPill: React.FC<{ status: PatientStatus }> = ({ status }) => {
+  const meta = STATUS_PILL[status] || { label: status, cls: 'bg-slate-100 text-slate-600' };
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${meta.cls}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
+      {meta.label}
+    </span>
+  );
+};
 
 export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
   overview,
@@ -102,14 +79,14 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
 }) => {
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<FilterCategory>(
-    overview.stats.waiting > 0 ? 'WAITING' : 'ALL'
-  );
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedDoctor, setSelectedDoctor] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('ALL');
+  const [selectedDate, setSelectedDate] = useState<string>('TODAY');
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [rowMenu, setRowMenu] = useState<number | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { doctor, current_patient, next_patients, all_patients, stats } = overview;
@@ -119,70 +96,26 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
     setTimeout(() => setActionFeedback(null), 3500);
   };
 
-  // 1. Check In Patient
-  const handleCheckIn = async (patientId: number, token: string, name: string) => {
+  // 1. CALL Action (WAITING -> CALLED)
+  const handleCall = async (patientId: number, token?: string) => {
     setIsUpdating(true);
     try {
-      await checkInPatient(patientId);
-      showToast(`Checked In: ${token} — ${name} (Added to Waiting Queue)`);
+      await updatePatientStatus(patientId, 'CALLED');
+      showToast(`Called: ${token || `Patient #${patientId}`}`);
       onRefresh();
     } catch (err: any) {
-      showToast(`Error checking in: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // 2. CALL NEXT
-  const handleCallNext = async () => {
-    setIsUpdating(true);
-    try {
-      const res = await callNextPatient(doctor.id);
-      if (res.patient) {
-        showToast(`🔔 CALLED NEXT: ${res.patient.token} — ${res.patient.patient_name}`);
-      }
-      onRefresh();
-    } catch (err: any) {
-      showToast(err.message || 'No patients are currently waiting.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // 3. START CONSULTATION
-  const handleStartConsultation = async (patientId: number, token: string) => {
-    setIsUpdating(true);
-    try {
-      await startConsultation(patientId);
-      showToast(`Consultation Started: ${token}`);
-      onRefresh();
-    } catch (err: any) {
-      showToast(`Error starting consultation: ${err.message}`);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // 4. COMPLETE CONSULTATION
-  const handleCompleteConsultation = async (patientId: number, token: string) => {
+  // 2. COMPLETE Action (CALLED -> COMPLETED)
+  const handleComplete = async (patientId: number, token?: string) => {
     setIsUpdating(true);
     try {
       await completeConsultation(patientId);
-      showToast(`Consultation Completed: ${token}`);
-      onRefresh();
-    } catch (err: any) {
-      showToast(`Error completing consultation: ${err.message}`);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // 5. SKIP
-  const handleSkip = async (patientId: number, token: string) => {
-    setIsUpdating(true);
-    try {
-      await skipPatient(patientId);
-      showToast(`Marked ${token} as SKIPPED`);
+      showToast(`Completed: ${token || `Patient #${patientId}`}`);
       onRefresh();
     } catch (err: any) {
       showToast(`Error: ${err.message}`);
@@ -191,21 +124,21 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
     }
   };
 
-  // 6. NO SHOW
-  const handleNoShow = async (patientId: number, token: string) => {
-    setIsUpdating(true);
+  // 3. DELETE ALL Action
+  const handleDeleteAll = async () => {
+    setIsDeleting(true);
     try {
-      await noShowPatient(patientId);
-      showToast(`Marked ${token} as NO SHOW`);
+      const res = await deleteAllAppointments(selectedDoctor === 'ALL' ? undefined : selectedDoctor);
+      showToast(res.message || 'All appointments removed from queue.');
+      setIsDeleteModalOpen(false);
       onRefresh();
     } catch (err: any) {
-      showToast(`Error: ${err.message}`);
+      showToast(`Error: ${err.message || 'Failed to delete appointments'}`);
     } finally {
-      setIsUpdating(false);
+      setIsDeleting(false);
     }
   };
 
-  // 7. Toggle Doctor Delay
   const handleToggleDoctorDelay = async () => {
     setIsUpdating(true);
     try {
@@ -215,27 +148,12 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
       showToast(`Doctor status updated: ${nextStatus}`);
       onRefresh();
     } catch (err: any) {
-      showToast(`Error updating doctor status: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Re-queue helper
-  const handleRequeue = async (patientId: number, token: string) => {
-    setIsUpdating(true);
-    try {
-      await updatePatientStatus(patientId, 'WAITING');
-      showToast(`Re-queued: ${token} (Added back to waiting line)`);
-      onRefresh();
-    } catch (err: any) {
-      showToast(`Error re-queuing: ${err.message}`);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // 8. Update Average Consultation Time
   const handleConsultationTimeChange = async (minutes: number) => {
     setIsUpdating(true);
     try {
@@ -243,473 +161,589 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({
       showToast(`Average consultation time updated to ${minutes} min`);
       onRefresh();
     } catch (err: any) {
-      showToast(`Error updating consultation time: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
-  const nextPatient = next_patients[0] ?? null;
-  const hasWaitingPatients = next_patients.length > 0;
+  // 4 Statistics
+  const bookedCount = stats?.booked ?? all_patients.filter((p) => p.status === 'BOOKED').length;
+  const checkedInCount = stats?.checked_in ?? all_patients.filter((p) => p.status === 'CHECKED_IN').length;
+  const waitingCount = stats?.waiting ?? all_patients.filter((p) => p.status === 'WAITING').length;
+  const completedCount = stats?.completed ?? all_patients.filter((p) => p.status === 'COMPLETED').length;
 
-  const now = new Date();
-  const hour = now.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateLine = now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-
+  // Filter Patients
   const q = search.trim().toLowerCase();
-  const filteredPatients = all_patients.filter(
-    (p) =>
-      matchesFilter(p, selectedFilter) &&
-      (!q || p.token.toLowerCase().includes(q) || p.patient_name.toLowerCase().includes(q))
-  );
-  const count = (f: FilterCategory) => all_patients.filter((p) => matchesFilter(p, f)).length;
+  const filteredPatients = useMemo(() => {
+    return all_patients.filter((p) => {
+      // 1. Search Query
+      const matchesSearch =
+        !q ||
+        p.token.toLowerCase().includes(q) ||
+        p.patient_name.toLowerCase().includes(q) ||
+        (p.phone && p.phone.includes(q));
+
+      // 2. Doctor Filter
+      const matchesDoctor =
+        selectedDoctor === 'ALL' ||
+        p.doctor_id === selectedDoctor ||
+        doctor.id === selectedDoctor;
+
+      // 3. Status Filter (Default 'ALL' shows active queue, excluding COMPLETED)
+      let matchesStatus = true;
+      if (selectedStatus === 'ALL') matchesStatus = p.status !== 'COMPLETED';
+      else if (selectedStatus === 'BOOKED') matchesStatus = p.status === 'BOOKED';
+      else if (selectedStatus === 'CHECKED_IN') matchesStatus = p.status === 'CHECKED_IN';
+      else if (selectedStatus === 'WAITING') matchesStatus = p.status === 'WAITING';
+      else if (selectedStatus === 'CALLED') matchesStatus = p.status === 'CALLED' || p.status === 'IN_CONSULTATION';
+      else if (selectedStatus === 'IN_CONSULTATION') matchesStatus = p.status === 'IN_CONSULTATION';
+      else if (selectedStatus === 'COMPLETED') matchesStatus = p.status === 'COMPLETED';
+      else if (selectedStatus === 'MISSED') matchesStatus = p.status === 'NO_SHOW' || p.status === 'SKIPPED';
+      else if (selectedStatus === 'WALK_IN') matchesStatus = p.is_walk_in === true;
+
+      return matchesSearch && matchesDoctor && matchesStatus;
+    });
+  }, [all_patients, q, selectedDoctor, selectedStatus, doctor.id]);
 
   const apptLabel = (p: Patient) =>
-    p.is_walk_in ? `Walk-in (${fmtTime(p.checked_in_at || p.created_at)})` : p.appointment_time;
+    p.is_walk_in ? `Walk-in (${fmtTime(p.checked_in_at || p.created_at)})` : p.appointment_time || '10:00 AM';
 
-  const doctorStatus = (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${isDoctorDelayed ? 'text-amber-700' : 'text-[#2a6a60]'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${isDoctorDelayed ? 'bg-amber-500' : 'bg-[#2a6a60]'}`} />
-      {isDoctorDelayed ? 'Delayed (15m)' : 'Available'}
-    </span>
-  );
-
-  const navItem = (active: boolean) =>
-    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-      active ? 'bg-[#d3e9e4] text-[#1f4f48]' : 'text-slate-700 hover:bg-slate-100'
-    }`;
-
-  const btnSoft =
-    'inline-flex items-center justify-center gap-2 rounded-xl bg-[#e8effb] hover:bg-[#dce6f8] text-[#1f2f4a] text-sm font-medium px-3.5 py-2 min-h-[40px] transition disabled:opacity-50';
+  const nextPatientId = next_patients[0]?.id;
 
   return (
-    <div className="min-h-screen bg-[#f3f5fa] text-[#0f1b2d] lg:pl-[280px]">
-      {/* Toast */}
+    <div className="h-screen h-[100dvh] max-h-[100dvh] w-full overflow-hidden flex flex-col bg-[#f8fafc] text-[#0f172a] font-sans antialiased">
+      {/* Action Toast Feedback */}
       {actionFeedback && (
-        <div className="fixed bottom-6 right-4 sm:right-6 z-50 max-w-[calc(100vw-2rem)] bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-medium">
-          <Sparkles className="w-4 h-4 text-[#7fd1c4] shrink-0" />
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <Sparkles className="w-3.5 h-3.5 text-teal-400 shrink-0" />
           <span>{actionFeedback}</span>
         </div>
       )}
 
-      {/* SIDEBAR (desktop / tablet landscape) */}
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-[280px] flex-col bg-white border-r border-[#e6eaf2] px-5 py-6 overflow-y-auto">
+      {/* TOP HEADER */}
+      <header className="shrink-0 bg-white border-b border-slate-200/90 px-4 sm:px-6 py-2.5 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-[#d3e9e4] text-[#1f4f48] flex items-center justify-center shrink-0">
-            <Cross className="w-5 h-5" strokeWidth={2.5} />
+          <div className="w-8 h-8 rounded-lg bg-[#0f766e] text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Cross className="w-4 h-4" strokeWidth={2.8} />
           </div>
-          <div className="min-w-0">
-            <div className="text-[15px] font-bold leading-tight">CITY CARE HOSPITAL</div>
-            <div className="text-[11px] font-semibold tracking-[0.12em] text-[#2a6a60]">RECEPTION</div>
+          <div>
+            <div className="text-sm font-extrabold tracking-tight text-slate-900 leading-tight">
+              {overview.hospital_name || 'CITY CARE HOSPITAL'}
+            </div>
           </div>
         </div>
 
-        <div className={`${eyebrow} mt-8 mb-2 px-1`}>Operations</div>
-        <nav className="space-y-1">
-          <Link to="/reception" className={navItem(true)}>
-            <LayoutPanelLeft className="w-5 h-5" /> Reception
+        <div className="flex items-center gap-2 sm:gap-4">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
+            Reception
+          </span>
+
+          <Link
+            to="/display"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2.5 py-1 rounded-md hover:bg-slate-100 transition"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Waiting Room TV</span>
           </Link>
-          <Link to="/display" className={navItem(false)}>
-            <Monitor className="w-5 h-5" /> Waiting Room TV
-          </Link>
-        </nav>
 
-        <div className="border-t border-[#e6eaf2] mt-6 pt-5">
-          <div className={`${eyebrow} mb-2 px-1`}>Queue today</div>
-          <div className="grid grid-cols-3 bg-[#eef3fb] rounded-xl py-3 divide-x divide-[#d9e2f1] text-center">
-            <div>
-              <div className="text-lg font-bold text-[#2a6a60]">{stats.waiting}</div>
-              <div className="text-xs text-[#5b6b82]">Waiting</div>
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Refresh queue"
+            title="Refresh queue"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 p-1.5 rounded-md hover:bg-slate-100 transition disabled:opacity-50"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings and Demo options"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 p-1.5 rounded-md hover:bg-slate-100 transition"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+            <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
+              <User className="w-3.5 h-3.5" />
             </div>
-            <div>
-              <div className="text-lg font-bold">{current_patient?.token ?? '—'}</div>
-              <div className="text-xs text-[#5b6b82]">Serving</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold">{nextPatient?.token ?? '—'}</div>
-              <div className="text-xs text-[#5b6b82]">Next</div>
-            </div>
+            <span className="text-xs font-semibold text-slate-700 hidden md:inline">Reception Staff</span>
           </div>
         </div>
-
-        <div className="border-t border-[#e6eaf2] mt-5 pt-4 px-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-wide truncate">{doctor.name}</div>
-              <div className="text-sm text-[#5b6b82]">{doctor.room}</div>
-            </div>
-            <span className={`rounded-full px-2.5 py-1 ${isDoctorDelayed ? 'bg-amber-50' : 'bg-[#e3f1ee]'}`}>{doctorStatus}</span>
-          </div>
-        </div>
-
-        <button onClick={() => setSettingsOpen(true)} className={`${navItem(false)} mt-auto`}>
-          <Settings className="w-5 h-5" /> Settings
-        </button>
-      </aside>
-
-      {/* TOP BAR (below lg: compact navigation) */}
-      <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-[#e6eaf2] px-4 py-3 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-[#d3e9e4] text-[#1f4f48] flex items-center justify-center shrink-0">
-          <Cross className="w-4 h-4" strokeWidth={2.5} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-bold leading-tight truncate">CITY CARE HOSPITAL</div>
-          <div className="text-[10px] font-semibold tracking-[0.12em] text-[#2a6a60]">RECEPTION</div>
-        </div>
-        <Link to="/display" className="inline-flex items-center gap-1.5 rounded-lg bg-[#eef3fb] px-3 py-2 text-xs font-medium min-h-[40px]">
-          <Monitor className="w-4 h-4" /> <span className="hidden sm:inline">Waiting Room TV</span><span className="sm:hidden">TV</span>
-        </Link>
-        <button onClick={() => setSettingsOpen(true)} aria-label="Settings" className="rounded-lg bg-[#eef3fb] p-2.5 min-h-[40px]">
-          <Settings className="w-4 h-4" />
-        </button>
       </header>
 
-      <main className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-8 py-5 lg:py-6 space-y-5 lg:space-y-6 min-w-0">
-        {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">{error}</div>
-        )}
-
-        {/* MAIN HEADER */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-tight">RECEPTION</h1>
-            <span className="rounded-full bg-[#e3f1ee] text-[#2a6a60] text-xs font-medium px-3 py-1">Outpatient Queue</span>
-          </div>
-          <div className={`${card} rounded-full px-4 py-2 flex items-center gap-3 text-sm`}>
-            <span className="font-medium">{doctor.name} · {doctor.room}</span>
-            <span className="w-px h-4 bg-[#dbe3ef]" />
-            {doctorStatus}
-          </div>
+      {/* ERROR BANNER */}
+      {error && (
+        <div className="shrink-0 bg-rose-50 border-b border-rose-200 px-6 py-1.5 text-xs font-semibold text-rose-800">
+          {error}
         </div>
+      )}
 
-        {/* GREETING */}
-        <div className="flex items-end justify-between gap-3 flex-wrap">
+      {/* DASHBOARD CONTENT CONTAINER */}
+      <main className="flex-1 min-h-0 flex flex-col px-4 sm:px-6 py-2.5 sm:py-3.5 gap-2.5 sm:gap-3 overflow-hidden max-w-[1440px] w-full mx-auto">
+        {/* 1. RECEPTION HEADER & IMPORT CSV */}
+        <section className="shrink-0 flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">{greeting}, Reception</h2>
-            <div className="flex items-center gap-2 text-sm text-[#5b6b82] mt-1">
-              <CalendarDays className="w-4 h-4" /> {dateLine} · General Outpatient
-            </div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-tight">
+              Reception
+            </h1>
+            <p className="text-xs font-medium text-slate-500 mt-0.5">
+              Manage today's patient queue
+            </p>
           </div>
-          <button onClick={() => setIsWalkInModalOpen(true)} className={`${card} inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm font-medium hover:bg-slate-50 transition`}>
-            <UserPlus className="w-4 h-4" /> + Walk-in
+
+          <button
+            onClick={() => setIsCsvModalOpen(true)}
+            className="inline-flex items-center gap-2 bg-[#0f766e] hover:bg-[#0d655e] active:bg-[#0a534d] text-white text-xs sm:text-sm font-bold px-4 py-2 sm:py-2.5 rounded-lg shadow-sm transition shrink-0"
+          >
+            <FileUp className="w-4 h-4" />
+            <span>Import CSV</span>
           </button>
-        </div>
+        </section>
 
-        {/* NOW SERVING + NEXT PATIENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start">
-          {/* NOW SERVING */}
-          <section className={`${card} p-5 sm:p-7 flex flex-col min-h-[300px]`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="rounded-md bg-[#e3f1ee] text-[#2a6a60] text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5">Now serving</span>
-              {current_patient && (
-                <span className="rounded-full bg-[#eef3fb] text-xs text-[#3b4a63] px-3 py-1.5 inline-flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2a6a60]" />
-                  {current_patient.status === 'CALLED' ? 'Called — awaiting arrival' : 'In consultation'}
-                </span>
-              )}
-            </div>
-
-            {current_patient ? (
-              <>
-                <div className="text-5xl sm:text-6xl font-extrabold tracking-tight mt-5">{current_patient.token}</div>
-                <div className="text-xl font-medium mt-2">{current_patient.patient_name}</div>
-                <div className="text-sm text-[#5b6b82] mt-1">
-                  {doctor.name} · {doctor.room} ·{' '}
-                  {current_patient.status === 'CALLED'
-                    ? `Called ${fmtTime(current_patient.called_at)}`
-                    : `Started ${fmtTime(current_patient.updated_at || current_patient.called_at)}`}
-                </div>
-
-                <div className="mt-auto pt-6">
-                  {current_patient.status === 'CALLED' ? (
-                    <div className="space-y-3">
-                      <button
-                        onClick={() => handleStartConsultation(current_patient.id, current_patient.token)}
-                        disabled={isUpdating}
-                        className="w-full min-h-[52px] rounded-xl bg-[#2f7167] hover:bg-[#295f57] text-white text-base font-medium inline-flex items-center justify-center gap-2 transition disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="w-5 h-5" /> Start Consultation
-                      </button>
-                      <div className="flex items-center justify-center gap-6 text-sm text-[#3b4a63]">
-                        <button onClick={() => handleSkip(current_patient.id, current_patient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">Skip</button>
-                        <button onClick={() => handleNoShow(current_patient.id, current_patient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">No-show</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <button
-                        onClick={() => handleCompleteConsultation(current_patient.id, current_patient.token)}
-                        disabled={isUpdating}
-                        className="w-full min-h-[52px] rounded-xl border border-[#b7cfca] bg-white hover:bg-[#f2f8f6] text-[#1f4f48] text-base font-medium inline-flex items-center justify-center gap-2 transition disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="w-5 h-5 text-[#2f7167]" /> Complete Consultation
-                      </button>
-                      <div className="flex justify-center">
-                        <button onClick={() => handleSkip(current_patient.id, current_patient.token)} disabled={isUpdating} className="text-sm text-[#5b6b82] hover:text-[#0f1b2d] px-3 py-2 min-h-[40px]">
-                          End / Skip consultation
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-                <div className="text-lg font-semibold text-[#3b4a63]">No patient in room</div>
-                <p className="text-sm text-[#5b6b82] mt-1">
-                  {hasWaitingPatients ? 'Use Call Next to bring in the next waiting patient.' : 'No patients are currently waiting.'}
-                </p>
-              </div>
-            )}
-          </section>
-
-          {/* NEXT PATIENT */}
-          <section className={`${card} p-5 sm:p-7 flex flex-col min-h-[300px]`}>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="rounded-md bg-[#eef3fb] text-[#3b4a63] text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5">Next patient</span>
-              {nextPatient && (
-                <span className="text-xs font-medium text-[#3b4a63]">
-                  {nextPatient.is_walk_in ? 'Walk-in' : `Appt: ${nextPatient.appointment_time}`}
-                  {nextPatient.checked_in_at ? ` · Arrived ${fmtTime(nextPatient.checked_in_at)}` : ''}
-                </span>
-              )}
-            </div>
-
-            {nextPatient ? (
-              <>
-                <div className="text-5xl sm:text-6xl font-extrabold tracking-tight mt-5">{nextPatient.token}</div>
-                <div className="text-xl font-medium mt-2">{nextPatient.patient_name}</div>
-                <div className="text-sm text-[#5b6b82] mt-1">
-                  General Triage · {apptLabel(nextPatient)}
-                  {nextPatient.checked_in_at ? ` · Arrived ${fmtTime(nextPatient.checked_in_at)}` : ''}
-                </div>
-
-                <div className="mt-auto pt-6 space-y-3">
-                  <button
-                    onClick={handleCallNext}
-                    disabled={isUpdating}
-                    className="w-full min-h-[56px] rounded-xl bg-[#2f7167] hover:bg-[#295f57] active:bg-[#235048] text-white text-lg font-semibold inline-flex items-center justify-center gap-3 shadow-[0_6px_16px_rgba(47,113,103,0.3)] transition disabled:opacity-50"
-                  >
-                    <Megaphone className="w-5 h-5" /> CALL NEXT ({nextPatient.token})
-                  </button>
-                  <div className="flex items-center justify-center gap-6 text-sm text-[#3b4a63]">
-                    <button onClick={() => handleSkip(nextPatient.id, nextPatient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">Skip</button>
-                    <button onClick={() => handleNoShow(nextPatient.id, nextPatient.token)} disabled={isUpdating} className="px-3 py-2 min-h-[40px] hover:text-[#0f1b2d]">No-show</button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-                <div className="text-lg font-semibold text-[#3b4a63]">No one waiting</div>
-                <p className="text-sm text-[#5b6b82] mt-1">Add a walk-in or check in a booked patient to fill the queue.</p>
-                <button disabled className="mt-5 w-full min-h-[56px] rounded-xl bg-slate-100 text-slate-400 text-lg font-semibold cursor-not-allowed">CALL NEXT</button>
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* TODAY'S QUEUE */}
-        <section className={`${card} overflow-hidden`}>
-          <div className="p-5 sm:p-6 flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <h3 className="text-xl font-semibold leading-tight">Today's Queue</h3>
-              <span className="rounded-full bg-[#eef3fb] text-xs text-[#3b4a63] px-3 py-1.5 whitespace-nowrap">{stats.waiting} waiting</span>
-            </div>
-            <div className="flex gap-1 bg-[#eef3fb] rounded-xl p-1 overflow-x-auto shrink-0 max-w-full order-last xl:order-none">
-              {FILTERS.map((f) => {
-                const active = selectedFilter === f.key;
-                return (
-                  <button
-                    key={f.key}
-                    onClick={() => setSelectedFilter(f.key)}
-                    className={`rounded-lg px-3 py-1.5 min-h-[40px] text-sm whitespace-nowrap transition ${
-                      active ? 'bg-white text-[#2a6a60] font-semibold shadow-sm' : 'text-[#3b4a63] hover:bg-white/60'
-                    }`}
-                  >
-                    {f.label} ({count(f.key)})
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex items-center gap-3 ml-auto basis-full sm:basis-auto sm:flex-none min-w-0">
-              <label className="flex items-center gap-2 bg-[#eef3fb] rounded-xl px-3 min-h-[44px] flex-1 sm:w-[280px] min-w-0">
-                <Search className="w-4 h-4 text-[#5b6b82] shrink-0" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search patient or token..."
-                  className="bg-transparent outline-none text-sm w-full min-w-0"
-                />
-              </label>
-              <button onClick={() => setIsWalkInModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#d3e9e4] hover:bg-[#c5e0da] text-[#1f4f48] text-sm font-medium px-4 min-h-[44px] whitespace-nowrap transition">
-                + Walk-in
-              </button>
-            </div>
+        {/* 2. TODAY STATISTICS (4 Interactive Filter Cards) */}
+        <section className="shrink-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            TODAY
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+            {/* BOOKED */}
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'BOOKED' ? 'ALL' : 'BOOKED')}
+              className={`text-left border rounded-xl p-2.5 sm:p-3 shadow-sm flex flex-col justify-between transition cursor-pointer ${
+                selectedStatus === 'BOOKED'
+                  ? 'bg-teal-50/60 border-teal-600 ring-2 ring-teal-600/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
+                BOOKED
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">
+                {bookedCount}
+              </div>
+            </button>
 
-          {/* Column header (md and up) */}
-          <div className="hidden xl:grid grid-cols-[90px_minmax(0,1.6fr)_minmax(0,1.3fr)_minmax(0,1fr)_190px] gap-4 bg-[#eef1fb] px-6 py-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#3b4a63]">
-            <div>Token</div><div>Patient</div><div>Appointment</div><div>Status</div><div className="text-right">Action</div>
-          </div>
+            {/* CHECKED IN */}
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'CHECKED_IN' ? 'ALL' : 'CHECKED_IN')}
+              className={`text-left border rounded-xl p-2.5 sm:p-3 shadow-sm flex flex-col justify-between transition cursor-pointer ${
+                selectedStatus === 'CHECKED_IN'
+                  ? 'bg-teal-50/60 border-teal-600 ring-2 ring-teal-600/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
+                CHECKED IN
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">
+                {checkedInCount}
+              </div>
+            </button>
 
-          <div className="divide-y divide-[#eef1f6]">
-            {filteredPatients.length === 0 && (
-              <div className="py-10 text-center text-sm text-[#5b6b82]">No patients match this filter or search.</div>
-            )}
-            {filteredPatients.map((p) => {
-              const isNext = nextPatient?.id === p.id;
-              const hasMenu = p.status === 'WAITING' || p.status === 'CALLED';
-              return (
-                <div
-                  key={p.id}
-                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] xl:grid-cols-[90px_minmax(0,1.6fr)_minmax(0,1.3fr)_minmax(0,1fr)_190px] items-center gap-x-4 gap-y-3 px-4 sm:px-6 py-4 xl:py-5"
-                >
-                  <div className={`text-lg font-bold ${p.is_walk_in ? 'text-[#2a6a60]' : ''}`}>{p.token}</div>
+            {/* WAITING */}
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'WAITING' ? 'ALL' : 'WAITING')}
+              className={`text-left border rounded-xl p-2.5 sm:p-3 shadow-sm flex flex-col justify-between transition cursor-pointer ${
+                selectedStatus === 'WAITING'
+                  ? 'bg-teal-50/60 border-teal-600 ring-2 ring-teal-600/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
+                WAITING
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-[#0f766e] mt-0.5">
+                {waitingCount}
+              </div>
+            </button>
 
-                  <div className="min-w-0 xl:contents">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base font-medium truncate">{p.patient_name}</span>
-                      {isNext && <span className="rounded bg-[#2f7167] text-white text-[10px] font-bold px-1.5 py-0.5 shrink-0">NEXT</span>}
-                      {p.is_walk_in && <span className="rounded bg-[#e8effb] text-[#3b4a63] text-[11px] px-1.5 py-0.5 shrink-0">Walk-in</span>}
-                    </div>
-                    <div className="text-sm text-[#5b6b82] xl:text-[#3b4a63] xl:mt-0 mt-0.5">{apptLabel(p)}</div>
-                  </div>
-
-                  <div className="justify-self-end xl:justify-self-start"><StatusPill status={p.status} /></div>
-
-                  <div className="col-span-3 xl:col-span-1 flex items-center justify-end gap-2 relative">
-                    {p.status === 'BOOKED' && (
-                      <button onClick={() => handleCheckIn(p.id, p.token, p.patient_name)} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Check in</button>
-                    )}
-                    {p.status === 'WAITING' && isNext && (
-                      <button onClick={handleCallNext} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Call</button>
-                    )}
-                    {p.status === 'CALLED' && (
-                      <button onClick={() => handleStartConsultation(p.id, p.token)} disabled={isUpdating} className="rounded-lg bg-[#2f7167] hover:bg-[#295f57] text-white text-sm font-medium px-4 min-h-[40px] transition disabled:opacity-50">Start</button>
-                    )}
-                    {p.status === 'IN_CONSULTATION' && (
-                      <button onClick={() => handleCompleteConsultation(p.id, p.token)} disabled={isUpdating} className="rounded-lg border border-[#b7cfca] text-[#1f4f48] text-sm font-medium px-4 min-h-[40px] hover:bg-[#f2f8f6] transition disabled:opacity-50">Complete</button>
-                    )}
-                    {(p.status === 'COMPLETED' || p.status === 'SKIPPED' || p.status === 'NO_SHOW') && (
-                      <button onClick={() => handleRequeue(p.id, p.token)} disabled={isUpdating} className="text-sm text-[#3b4a63] hover:text-[#0f1b2d] px-3 min-h-[40px]">Re-queue</button>
-                    )}
-                    <div className="w-9 flex justify-center">
-                      {hasMenu && (
-                        <>
-                          <button onClick={() => setRowMenu(rowMenu === p.id ? null : p.id)} aria-label={`More actions for ${p.token}`} className="p-2 rounded-lg hover:bg-slate-100 text-[#5b6b82]">
-                            <MoreHorizontal className="w-5 h-5" />
-                          </button>
-                          {rowMenu === p.id && (
-                            <>
-                              <div className="fixed inset-0 z-30" onClick={() => setRowMenu(null)} />
-                              <div className="absolute right-0 top-full mt-1 z-40 w-40 bg-white rounded-xl border border-[#e6eaf2] shadow-xl p-1.5 text-sm">
-                                <button onClick={() => { setRowMenu(null); handleSkip(p.id, p.token); }} className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">Skip</button>
-                                <button onClick={() => { setRowMenu(null); handleNoShow(p.id, p.token); }} className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-rose-50 text-rose-700">No-show</button>
-                              </div>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {/* COMPLETED */}
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'COMPLETED' ? 'ALL' : 'COMPLETED')}
+              className={`text-left border rounded-xl p-2.5 sm:p-3 shadow-sm flex flex-col justify-between transition cursor-pointer ${
+                selectedStatus === 'COMPLETED'
+                  ? 'bg-teal-50/60 border-teal-600 ring-2 ring-teal-600/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+              }`}
+            >
+              <div className="text-[11px] font-bold tracking-wide uppercase text-slate-500">
+                COMPLETED
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">
+                {completedCount}
+              </div>
+            </button>
           </div>
         </section>
 
-        {/* BOTTOM OPERATIONAL BAR */}
-        <section className={`${card} px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-3`}>
-          <div className="flex items-center gap-3 text-sm">
-            <Stethoscope className="w-5 h-5 text-[#3b4a63]" />
-            <span className="font-medium">{doctor.name} · {doctor.room}</span>
-            <span className="w-px h-4 bg-[#dbe3ef]" />
-            {doctorStatus}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setIsCsvModalOpen(true)} className={btnSoft}><FileUp className="w-4 h-4" /> Import CSV</button>
-            <button
-              onClick={handleToggleDoctorDelay}
-              disabled={isUpdating}
-              title="Toggle doctor delay"
-              className={`${btnSoft} ${isDoctorDelayed ? '!bg-amber-100 !text-amber-900 hover:!bg-amber-200' : ''}`}
-            >
-              <Hourglass className="w-4 h-4" /> Doctor Delay
-            </button>
-            <div className="relative">
-              <button onClick={() => setMoreOpen(!moreOpen)} className={btnSoft}>
-                <MoreVertical className="w-4 h-4" /> More <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              {moreOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
-                  <div className="absolute right-0 bottom-full mb-2 z-40 w-72 bg-white rounded-xl border border-[#e6eaf2] shadow-xl p-2 text-sm">
-                    <button onClick={() => { setMoreOpen(false); onRefresh(); }} disabled={isRefreshing} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
-                      <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh queue
-                    </button>
-                    {onResetDemo && (
-                      <>
-                        <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#5b6b82]">Demo scenarios</div>
-                        <button onClick={() => { setMoreOpen(false); onResetDemo('all_booked'); }} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
-                          <RotateCcw className="w-4 h-4" /> Morning state (all booked)
-                        </button>
-                        <button onClick={() => { setMoreOpen(false); onResetDemo('active_demo'); }} className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2.5 hover:bg-slate-50">
-                          <RotateCcw className="w-4 h-4" /> Mid-day live queue
-                        </button>
-                      </>
-                    )}
-                    <Link to="/" className="flex items-center gap-2 rounded-lg px-3 py-2.5 hover:bg-slate-50">
-                      <Home className="w-4 h-4" /> Demo launcher
-                    </Link>
-                  </div>
-                </>
-              )}
+        {/* 3. QUEUE HEADER & FILTERS */}
+        <section className="shrink-0 space-y-1.5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+              QUEUE
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(true)}
+                title="Delete all appointments from today's queue"
+                className="inline-flex items-center gap-1.5 bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-rose-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg shadow-xs transition cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Delete All</span>
+              </button>
+              <button
+                onClick={() => setIsWalkInModalOpen(true)}
+                className="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-slate-600 stroke-[2.5]" />
+                <span>+ Add Patient</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[170px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search patients..."
+                className="w-full bg-white border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 pl-8 pr-3 py-1.5 rounded-lg outline-none focus:border-teal-600 shadow-sm"
+              />
+            </div>
+
+            {/* Doctor Filter */}
+            <div className="relative">
+              <select
+                value={selectedDoctor}
+                onChange={(e) => setSelectedDoctor(e.target.value)}
+                aria-label="Filter by doctor"
+                className="bg-white border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg pl-3 pr-7 py-1.5 outline-none focus:border-teal-600 shadow-sm cursor-pointer appearance-none"
+              >
+                <option value="ALL">Doctor: All</option>
+                <option value="dr-kumar">{doctor.name} ({doctor.room})</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Status Filter */}
+            <div className="relative">
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as FilterStatus)}
+                aria-label="Filter by status"
+                className="bg-white border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg pl-3 pr-7 py-1.5 outline-none focus:border-teal-600 shadow-sm cursor-pointer appearance-none"
+              >
+                <option value="ALL">Status: All</option>
+                <option value="WAITING">Status: Waiting</option>
+                <option value="CALLED">Status: Called</option>
+                <option value="BOOKED">Status: Booked</option>
+                <option value="CHECKED_IN">Status: Checked In</option>
+                <option value="COMPLETED">Status: Completed</option>
+                <option value="MISSED">Status: No-show / Skipped</option>
+                <option value="WALK_IN">Status: Walk-ins</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Date Filter */}
+            <div className="relative">
+              <select
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                aria-label="Filter by date"
+                className="bg-white border border-slate-200 text-xs font-semibold text-slate-700 rounded-lg pl-3 pr-7 py-1.5 outline-none focus:border-teal-600 shadow-sm cursor-pointer appearance-none"
+              >
+                <option value="TODAY">Date: Today</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        </section>
+
+        {/* 4. PATIENT TABLE (Fixed Header + Flexible Scrollable Patient Rows) */}
+        <section className="flex-1 min-h-0 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+          {/* FIXED TABLE HEADER */}
+          <div className="shrink-0 bg-slate-50 border-b border-slate-200 px-4 sm:px-6 py-2 grid grid-cols-[70px_minmax(0,2fr)_minmax(0,1.4fr)_100px_130px_140px] gap-3 text-[10.5px] font-bold uppercase tracking-wider text-slate-500 select-none">
+            <div>TOKEN</div>
+            <div>PATIENT</div>
+            <div>DOCTOR</div>
+            <div>TIME</div>
+            <div>STATUS</div>
+            <div className="text-right">ACTION</div>
+          </div>
+
+          {/* SCROLLABLE PATIENT LIST */}
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
+            {filteredPatients.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 text-xs font-medium">
+                {all_patients.length === 0
+                  ? "No appointments for today."
+                  : "No patients match the selected filter or search query."}
+              </div>
+            ) : (
+              filteredPatients.map((p) => {
+                const isNext = nextPatientId === p.id && p.status === 'WAITING';
+                const isServing = current_patient?.id === p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`px-4 sm:px-6 py-2.5 sm:py-3 grid grid-cols-[70px_minmax(0,2fr)_minmax(0,1.4fr)_100px_130px_140px] gap-3 items-center hover:bg-slate-50/80 transition text-xs ${
+                      isServing ? 'bg-teal-50/40' : ''
+                    }`}
+                  >
+                    {/* Token */}
+                    <div className="font-mono font-black text-sm text-slate-900">
+                      {p.token}
+                    </div>
+
+                    {/* Patient Name */}
+                    <div className="min-w-0 flex items-center gap-2">
+                      <span className="font-bold text-slate-900 truncate">{p.patient_name}</span>
+                      {p.is_walk_in && (
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0">
+                          Walk-in
+                        </span>
+                      )}
+                      {isNext && (
+                        <span className="bg-[#0f766e] text-white text-[9.5px] font-extrabold px-1.5 py-0.5 rounded shrink-0">
+                          NEXT
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Doctor */}
+                    <div className="text-slate-600 font-medium truncate">
+                      {doctor.name}
+                    </div>
+
+                    {/* Time */}
+                    <div className="text-slate-600 font-medium whitespace-nowrap">
+                      {apptLabel(p)}
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      <StatusPill status={p.status} />
+                    </div>
+
+                    {/* Action: ONLY CALL (Waiting), COMPLETE (Called), — (Completed) */}
+                    <div className="flex items-center justify-end">
+                      {p.status === 'CALLED' || p.status === 'IN_CONSULTATION' ? (
+                        <button
+                          onClick={() => handleComplete(p.id, p.token)}
+                          disabled={isUpdating}
+                          className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold px-3 py-1 rounded-md shadow-xs transition disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Complete
+                        </button>
+                      ) : p.status === 'COMPLETED' ? (
+                        <span className="text-slate-400 font-medium text-sm pr-2 select-none">—</span>
+                      ) : (
+                        <button
+                          onClick={() => handleCall(p.id, p.token)}
+                          disabled={isUpdating}
+                          className="bg-[#0f766e] hover:bg-[#0d655e] active:bg-[#0a534d] text-white text-xs font-bold px-3.5 py-1 rounded-md shadow-xs transition disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Call
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </section>
       </main>
 
-      {/* SETTINGS: average consultation time (existing setting) */}
+      {/* SETTINGS & DEMO MODAL */}
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" onClick={() => setSettingsOpen(false)}>
-          <div className={`${card} w-full max-w-sm p-5`} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold">Settings</h3>
-              <button onClick={() => setSettingsOpen(false)} aria-label="Close" className="p-1.5 rounded-lg hover:bg-slate-100"><X className="w-4 h-4" /></button>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md p-5 rounded-2xl border border-slate-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Queue & Doctor Settings</h3>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                aria-label="Close settings"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <label htmlFor="avg-consultation-time" className={eyebrow}>Average consultation time</label>
-            <select
-              id="avg-consultation-time"
-              value={doctor.avg_consultation_time || 15}
-              onChange={(e) => handleConsultationTimeChange(Number(e.target.value))}
-              disabled={isUpdating}
-              className="mt-2 w-full rounded-xl border border-[#e6eaf2] bg-[#eef3fb] px-3 min-h-[44px] text-sm"
-            >
-              <option value={10}>10 minutes</option>
-              <option value={15}>15 minutes (Default)</option>
-              <option value={20}>20 minutes</option>
-              <option value={30}>30 minutes</option>
-            </select>
-            <p className="text-xs text-[#5b6b82] mt-2">Used to estimate patient wait times.</p>
+
+            {/* Doctor Status */}
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Doctor Delay Status
+              </label>
+              <div className="mt-1.5 flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <div className="text-xs font-bold text-slate-900">{doctor.name} ({doctor.room})</div>
+                  <div className="text-xs text-slate-500">
+                    Current: <span className="font-semibold text-teal-800">{doctor.delay_status}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleDoctorDelay}
+                  disabled={isUpdating}
+                  className="bg-white border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-800 px-3 py-1.5 rounded-lg shadow-xs transition"
+                >
+                  Toggle Delay
+                </button>
+              </div>
+            </div>
+
+            {/* Avg Consultation Time */}
+            <div>
+              <label htmlFor="settings-avg-time" className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Average Consultation Time
+              </label>
+              <select
+                id="settings-avg-time"
+                value={doctor.avg_consultation_time || 15}
+                onChange={(e) => handleConsultationTimeChange(Number(e.target.value))}
+                disabled={isUpdating}
+                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none"
+              >
+                <option value={10}>10 minutes</option>
+                <option value={15}>15 minutes (Default)</option>
+                <option value={20}>20 minutes</option>
+                <option value={30}>30 minutes</option>
+              </select>
+            </div>
+
+            {/* Demo Scenarios */}
+            {onResetDemo && (
+              <div className="pt-2 border-t border-slate-100">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Demo Scenarios
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      onResetDemo('all_booked');
+                    }}
+                    className="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold p-2.5 rounded-xl transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Morning State</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(false);
+                      onResetDemo('active_demo');
+                    }}
+                    className="flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold p-2.5 rounded-xl transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Active Queue</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Delete All Action in Settings */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-rose-700">Delete All Appointments</div>
+                <div className="text-[11px] text-slate-500">Clear today's queue completely</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsOpen(false);
+                  setIsDeleteModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Delete All
+              </button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* DELETE ALL CONFIRMATION MODAL */}
+      {isDeleteModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => !isDeleting && setIsDeleteModalOpen(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md p-6 rounded-2xl border border-slate-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-900 leading-snug">
+                  Delete all appointments?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  This will remove all appointments from today's queue. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-lg shadow-sm transition disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
       <CsvImportModal
         isOpen={isCsvModalOpen}
         onClose={() => setIsCsvModalOpen(false)}
-        onSuccess={(count) => {
-          showToast(`Imported ${count} appointments from HMS.`);
+        onSuccess={(importedCount) => {
+          showToast(`Imported ${importedCount} appointments successfully.`);
           onRefresh();
         }}
       />
+
+      {/* Add / Walk-In Patient Modal */}
       <WalkInModal
         isOpen={isWalkInModalOpen}
         onClose={() => setIsWalkInModalOpen(false)}
         onSuccess={(token, name) => {
-          showToast(`Registered Walk-In: ${token} — ${name}`);
+          showToast(`Added Patient: ${token} — ${name}`);
           onRefresh();
         }}
       />

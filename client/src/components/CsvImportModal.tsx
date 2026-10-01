@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UploadCloud, FileSpreadsheet, X, CheckCircle2, AlertCircle, FileText, Sparkles } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, X, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { importAppointmentsCsv } from '../services/api';
 
 interface CsvImportModalProps {
@@ -15,6 +15,178 @@ Anjali Nair,9876543222,Dr. Kumar,01:30 PM
 Deepak Joshi,9876543223,Dr. Kumar,01:45 PM
 Kavita Roy,9876543224,Dr. Kumar,02:00 PM`;
 
+/**
+ * Robust CSV parser that parses raw CSV string into rows and cells,
+ * properly handling quotes, commas within quotes, escaped quotes,
+ * CRLF/LF line endings, and stripping UTF-8 BOM.
+ */
+function parseCsvRows(text: string): string[][] {
+  // Strip BOM if present
+  let cleanText = text;
+  if (cleanText.charCodeAt(0) === 0xfeff) {
+    cleanText = cleanText.slice(1);
+  }
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let insideQuotes = false;
+
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
+
+    if (insideQuotes) {
+      if (char === '"') {
+        if (nextChar === '"') {
+          currentCell += '"';
+          i++; // skip escaped quote
+        } else {
+          insideQuotes = false;
+        }
+      } else {
+        currentCell += char;
+      }
+    } else {
+      if (char === '"') {
+        insideQuotes = true;
+      } else if (char === ',') {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if (char === '\r') {
+        if (nextChar === '\n') {
+          i++;
+        }
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+        if (currentRow.some((c) => c.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else if (char === '\n') {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+        if (currentRow.some((c) => c.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else {
+        currentCell += char;
+      }
+    }
+  }
+
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some((c) => c.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
+}
+
+function normalizeHeader(h: string): string {
+  return h
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, '')
+    .replace(/[_\s-]+/g, ' ');
+}
+
+function getHeaderIndex(headers: string[], type: 'name' | 'phone' | 'doctor' | 'time'): number {
+  const norm = headers.map(normalizeHeader);
+
+  if (type === 'doctor') {
+    return norm.findIndex(
+      (h) => h.includes('doctor') || h === 'dr' || h.startsWith('dr ') || h.includes('physician')
+    );
+  }
+  if (type === 'name') {
+    return norm.findIndex(
+      (h) => !h.includes('doctor') && (h.includes('patient') || h.includes('name'))
+    );
+  }
+  if (type === 'phone') {
+    return norm.findIndex(
+      (h) => h.includes('phone') || h.includes('mobile') || h.includes('contact') || h.includes('cell')
+    );
+  }
+  if (type === 'time') {
+    return norm.findIndex(
+      (h) => h.includes('time') || h.includes('appointment') || h.includes('appt') || h.includes('schedule')
+    );
+  }
+  return -1;
+}
+
+export function parseCsvContent(content: string) {
+  const rows = parseCsvRows(content);
+  console.log('[CSV IMPORT] raw file size:', content.length, 'bytes');
+  console.log('[CSV IMPORT] first 500 characters:\n', content.slice(0, 500));
+
+  if (rows.length < 2) {
+    throw new Error('CSV must contain a header row and at least one data row.');
+  }
+
+  const headerRow = rows[0];
+  console.log('[CSV IMPORT] parsed headers:', JSON.stringify(headerRow));
+  console.log('[CSV IMPORT] normalized headers:', JSON.stringify(headerRow.map(normalizeHeader)));
+
+  const nameIdx = getHeaderIndex(headerRow, 'name');
+  const phoneIdx = getHeaderIndex(headerRow, 'phone');
+  const doctorIdx = getHeaderIndex(headerRow, 'doctor');
+  const timeIdx = getHeaderIndex(headerRow, 'time');
+
+  // Validate required columns
+  const missingColumns: string[] = [];
+  if (nameIdx === -1) missingColumns.push('Patient Name');
+  if (phoneIdx === -1) missingColumns.push('Phone');
+  if (doctorIdx === -1) missingColumns.push('Doctor');
+  if (timeIdx === -1) missingColumns.push('Appointment Time');
+
+  if (missingColumns.length > 0) {
+    if (missingColumns.length === 1) {
+      throw new Error(`Missing required column: ${missingColumns[0]}`);
+    }
+    throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
+  }
+
+  const appointments: Array<{
+    patient_name: string;
+    phone: string;
+    appointment_time: string;
+    doctor_name: string;
+  }> = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
+    const patientName = cols[nameIdx]?.trim();
+    if (!patientName) continue;
+
+    const phone = cols[phoneIdx]?.trim() || '+91 98765 00000';
+    const doctorName = cols[doctorIdx]?.trim() || 'Dr. Kumar';
+    const apptTime = cols[timeIdx]?.trim() || '10:00 AM';
+
+    appointments.push({
+      patient_name: patientName,
+      phone,
+      appointment_time: apptTime,
+      doctor_name: doctorName,
+    });
+  }
+
+  console.log('[CSV IMPORT] parsed row count:', rows.length - 1);
+  console.log('[CSV IMPORT] mapped rows count:', appointments.length);
+
+  if (appointments.length === 0) {
+    throw new Error('No valid appointment rows found in the CSV.');
+  }
+
+  return appointments;
+}
+
 export const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [csvText, setCsvText] = useState(SAMPLE_CSV);
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
@@ -25,48 +197,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose,
 
   if (!isOpen) return null;
 
-  const parseCsvContent = (content: string) => {
-    const lines = content.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length < 2) {
-      throw new Error('CSV must contain a header row and at least one data row.');
-    }
-
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-    
-    // Find column indexes
-    const nameIdx = headers.findIndex(h => h.includes('name') || h.includes('patient'));
-    const timeIdx = headers.findIndex(h => h.includes('time') || h.includes('appointment'));
-    const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('contact') || h.includes('mobile'));
-    const doctorIdx = headers.findIndex(h => h.includes('doctor'));
-
-    if (nameIdx === -1 || timeIdx === -1) {
-      throw new Error('Unable to import this file. Please check the required columns (Patient Name, Appointment Time).');
-    }
-
-    const appointments: Array<{ patient_name: string; phone?: string; appointment_time: string; doctor_name?: string }> = [];
-
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(c => c.trim().replace(/['"]/g, ''));
-      if (cols.length <= nameIdx || !cols[nameIdx]) continue;
-
-      appointments.push({
-        patient_name: cols[nameIdx],
-        phone: phoneIdx !== -1 ? cols[phoneIdx] : undefined,
-        appointment_time: cols[timeIdx] || '10:00 AM',
-        doctor_name: doctorIdx !== -1 ? cols[doctorIdx] : 'Dr. Kumar',
-      });
-    }
-
-    if (appointments.length === 0) {
-      throw new Error('No valid appointment rows found in the CSV.');
-    }
-
-    return appointments;
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.log('[CSV IMPORT] filename:', file.name, 'size:', file.size);
       setFileName(file.name);
       setErrorMessage(null);
       const reader = new FileReader();
@@ -83,7 +217,9 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose,
     setIsProcessing(true);
     try {
       const appointments = parseCsvContent(csvText);
+      console.log('[CSV IMPORT] API payload:', { count: appointments.length, appointments });
       const res = await importAppointmentsCsv(appointments, 'dr-kumar');
+      console.log('[CSV IMPORT] API response:', res);
       setSuccessMessage(`${res.count} appointments imported successfully.`);
       onSuccess(res.count);
       setTimeout(() => {
@@ -91,7 +227,8 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({ isOpen, onClose,
         setSuccessMessage(null);
       }, 1500);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Unable to import this file. Please check the required columns.');
+      console.error('[CSV IMPORT] Error caught in UI:', err);
+      setErrorMessage(err.message || 'Import failed. Please check your data and try again.');
     } finally {
       setIsProcessing(false);
     }

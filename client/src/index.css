@@ -6,7 +6,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+    @apply bg-slate-100/70 text-slate-900 antialiased font-sans;
   }
 }
 
@@ -42,77 +42,1176 @@
   animation: soft-pulse 2.5s infinite ease-in-out;
 }
 
-/* Patient tracking page: height-aware compact sizing (visual only) */
+/* ============================================================
+   PATIENT TRACKING PAGE: MOBILE-FIRST COHESIVE LAYOUT
+   ============================================================ */
+
 .pt-shell {
   min-height: 100vh;
   min-height: 100dvh;
-  padding: clamp(4px, 1.2dvh, 14px) 0;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  background-color: #f1f5f9;
+  box-sizing: border-box;
 }
 
 .pt-page {
-  line-height: 1.3;
-  --pt-g: clamp(5px, 1.3dvh, 12px);
-  --pt-cx: clamp(12px, 3.6vw, 16px);
-  --pt-cy: clamp(6px, 1.5dvh, 14px);
-  --pt-r: clamp(14px, 2.4dvh, 20px);
-  --pt-r-sm: clamp(10px, 1.6dvh, 14px);
-  --pt-ico: clamp(30px, 4.6dvh, 40px);
-  --pt-ico-sm: clamp(28px, 3.8dvh, 34px);
-  --pt-avatar: clamp(28px, 3.8dvh, 34px);
-  --pt-h1: clamp(14px, 1.9dvh, 16px);
-  --pt-h2: clamp(13px, 1.7dvh, 15px);
-  --pt-tok: clamp(40px, 8dvh, 64px);
-  --pt-pos: clamp(18px, 2.7dvh, 24px);
-  --pt-pill: clamp(12px, 1.6dvh, 14px);
-  --pt-pill-y: clamp(4px, 0.8dvh, 7px);
-  --pt-tc-t: clamp(8px, 2dvh, 20px);
-  --pt-tc-b: clamp(8px, 1.8dvh, 18px);
-  --pt-tiny: clamp(1px, 0.4dvh, 4px);
-  --pt-sm: clamp(5px, 1.1dvh, 10px);
-  --pt-md: clamp(6px, 1.4dvh, 12px);
-  --pt-gs: clamp(5px, 0.9dvh, 8px);
-  --pt-cell-y: clamp(4px, 1dvh, 10px);
-  --pt-msg-y: clamp(5px, 1.2dvh, 10px);
-  --pt-btn-y: clamp(6px, 1.2dvh, 10px);
-  --pt-nx: 14px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(8px, 1.4dvh, 14px) clamp(12px, 3.5vw, 18px);
+  box-sizing: border-box;
+  color: #0f172a;
+  line-height: 1.25;
+  box-shadow: 0 4px 25px -4px rgba(15, 23, 42, 0.08);
 }
 
-/* Progressively more compact on shorter viewports */
-@media (max-height: 940px) {
-  .pt-shell { padding: 10px 0; }
-  .pt-page {
-    --pt-g: 9px; --pt-cy: 11px; --pt-r: 18px; --pt-ico: 38px;
-    --pt-tok: 58px; --pt-pos: 23px; --pt-tc-t: 14px; --pt-tc-b: 12px;
-    --pt-cell-y: 7px; --pt-msg-y: 8px; --pt-btn-y: 8px; --pt-pill-y: 6px;
-    --pt-sm: 8px; --pt-md: 10px; --pt-gs: 8px;
-  }
+/* 1. App Header */
+.pt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: clamp(5px, 1dvh, 8px);
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
 }
-@media (max-height: 800px) {
-  .pt-shell { padding: 9px 0; }
-  .pt-page {
-    --pt-g: 6px; --pt-cy: 8px; --pt-r: 16px; --pt-ico: 34px; --pt-ico-sm: 30px; --pt-avatar: 30px;
-    --pt-tok: 52px; --pt-pos: 21px; --pt-tc-t: 8px; --pt-tc-b: 8px;
-    --pt-cell-y: 5px; --pt-msg-y: 7px; --pt-btn-y: 7px; --pt-pill-y: 5px;
-    --pt-sm: 7px; --pt-md: 8px; --pt-gs: 7px; --pt-tiny: 2px;
-  }
+
+.pt-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
+
+.pt-logo-icon {
+  width: clamp(28px, 3.8dvh, 32px);
+  height: clamp(28px, 3.8dvh, 32px);
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #0f766e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pt-hospital-name {
+  font-size: clamp(13.5px, 1.7dvh, 15.5px);
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-hospital-sub {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  color: #64748b;
+  margin-top: 1px;
+}
+
+.pt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pt-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #ccfbf1;
+}
+
+.pt-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #0f766e;
+}
+
+.pt-avatar {
+  width: clamp(24px, 3.4dvh, 28px);
+  height: clamp(24px, 3.4dvh, 28px);
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 2. Department Strip */
+.pt-dept-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(3px, 0.6dvh, 6px) 0;
+  flex-shrink: 0;
+}
+
+.pt-dept-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pt-dept-icon {
+  color: #0f766e;
+  flex-shrink: 0;
+}
+
+.pt-dept-title {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-dept-time {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 3. Hero Token Section (Refined: Compact height, larger A07) */
+.pt-hero-section {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: clamp(8px, 1.4dvh, 14px) 12px;
+  background: radial-gradient(circle at center, #f0fdfa 0%, #ffffff 75%);
+  border-radius: 14px;
+  border: 1px solid #e6f4f1;
+  margin: clamp(2px, 0.4dvh, 5px) 0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02);
+}
+
+.pt-hero-label {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pt-hero-token {
+  font-size: clamp(3.6rem, 13.5vw, 5rem);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: clamp(3px, 0.5dvh, 6px) 0;
+}
+
+.pt-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: clamp(3px, 0.6dvh, 6px) clamp(12px, 3.5vw, 16px);
+  border-radius: 999px;
+  font-size: clamp(11.5px, 1.4dvh, 13px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pt-status-waiting {
+  background: #e6f4f1;
+  color: #0f766e;
+  border: 1px solid #ccfbf1;
+}
+
+.pt-status-next {
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(15, 118, 110, 0.25);
+}
+
+.pt-status-called {
+  background: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.3);
+}
+
+.pt-status-consult {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+}
+
+.pt-status-delayed {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.pt-status-completed {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.pt-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.pt-hero-sub {
+  margin-top: clamp(4px, 0.8dvh, 8px);
+  font-size: clamp(11.5px, 1.3dvh, 12.5px);
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.pt-hero-direction {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.pt-hero-wait {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 4. Live Queue Position Card (Refined: Airy 3 columns, lighter borders, no box-in-box feeling) */
+.pt-queue-pos-card {
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 12px;
+  padding: clamp(7px, 1.1dvh, 10px) clamp(10px, 3vw, 14px);
+  margin: clamp(2px, 0.4dvh, 4px) 0;
+  flex-shrink: 0;
+}
+
+.pt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: clamp(4px, 0.7dvh, 7px);
+}
+
+.pt-card-title {
+  font-size: clamp(10px, 1.2dvh, 11px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pt-card-sub {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  font-weight: 500;
+  color: #64748b;
+}
+
+.pt-pos-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pt-pos-col {
+  flex: 1;
+  text-align: center;
+  padding: clamp(5px, 0.8dvh, 8px) clamp(4px, 1.2vw, 8px);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #eef2f6;
+}
+
+.pt-pos-col.pt-pos-you {
+  background: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+  box-shadow: 0 1px 4px rgba(15, 118, 110, 0.15);
+}
+
+.pt-pos-label {
+  font-size: clamp(9px, 1.1dvh, 10px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: block;
+  opacity: 0.8;
+}
+
+.pt-pos-token {
+  font-size: clamp(18px, 2.6dvh, 23px);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  line-height: 1.15;
+  margin: clamp(2px, 0.3dvh, 3px) 0;
+  display: block;
+}
+
+.pt-pos-sub {
+  font-size: clamp(10px, 1.2dvh, 11px);
+  font-weight: 500;
+  display: block;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-pos-arrow {
+  display: flex;
+  align-items: center;
+  color: #cbd5e1;
+  flex-shrink: 0;
+}
+
+.pt-pos-msg {
+  margin-top: clamp(5px, 0.7dvh, 7px);
+  padding: clamp(3px, 0.5dvh, 5px) 4px;
+  font-size: clamp(11px, 1.25dvh, 12px);
+  color: #475569;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.35;
+}
+
+/* 5. Progress Strip */
+.pt-progress-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(4px, 0.8dvh, 7px) clamp(8px, 2vw, 12px);
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #edf2f7;
+  margin: clamp(2px, 0.4dvh, 4px) 0;
+  flex-shrink: 0;
+}
+
+.pt-step-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #94a3b8;
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  font-weight: 500;
+}
+
+.pt-step-item.is-done {
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.pt-step-item.is-current {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.pt-step-icon {
+  width: clamp(16px, 2.2dvh, 19px);
+  height: clamp(16px, 2.2dvh, 19px);
+  border-radius: 999px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.pt-step-item.is-done .pt-step-icon {
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
+.pt-step-item.is-current .pt-step-icon {
+  background: #0f766e;
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px #e6f4f1;
+}
+
+.pt-step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.pt-step-label {
+  white-space: nowrap;
+}
+
+.pt-step-line {
+  flex: 1;
+  height: 1.5px;
+  background: #e2e8f0;
+  margin: 0 6px;
+  border-radius: 999px;
+}
+
+.pt-step-line.is-done {
+  background: #0f766e;
+}
+
+/* 6. Appointment Row */
+.pt-appointment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(5px, 0.8dvh, 8px) clamp(8px, 2vw, 12px);
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 11px;
+  margin: clamp(2px, 0.4dvh, 4px) 0;
+  flex-shrink: 0;
+}
+
+.pt-appt-icon {
+  width: clamp(26px, 3.4dvh, 30px);
+  height: clamp(26px, 3.4dvh, 30px);
+  border-radius: 7px;
+  background: #f0fdfa;
+  color: #0f766e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pt-appt-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pt-appt-title {
+  font-size: clamp(11.5px, 1.3dvh, 12.5px);
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-appt-sub {
+  font-size: clamp(10.5px, 1.2dvh, 11.5px);
+  color: #64748b;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-chevron {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* 7. Actions Row (SMS & Reception) */
+.pt-actions-row {
+  display: flex;
+  gap: 8px;
+  margin: clamp(2px, 0.4dvh, 4px) 0;
+  flex-shrink: 0;
+}
+
+.pt-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: clamp(5px, 0.8dvh, 8px) clamp(8px, 2vw, 10px);
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  min-width: 0;
+}
+
+.pt-action-icon {
+  width: clamp(22px, 3dvh, 25px);
+  height: clamp(22px, 3dvh, 25px);
+  border-radius: 6px;
+  background: #f0fdfa;
+  color: #0f766e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pt-action-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.pt-action-title {
+  font-size: clamp(11px, 1.25dvh, 12px);
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-action-sub {
+  font-size: clamp(9.5px, 1.1dvh, 10.5px);
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-action-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* 8. Clinical Switcher Panel (Refined: Visually subordinate, minimal weight) */
+.pt-switcher-panel {
+  background: transparent;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  padding: clamp(4px, 0.6dvh, 6px) clamp(6px, 1.5vw, 8px);
+  margin-top: clamp(2px, 0.4dvh, 4px);
+  flex-shrink: 0;
+}
+
+.pt-switcher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: clamp(2px, 0.4dvh, 4px);
+}
+
+.pt-switcher-title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.pt-switcher-badge {
+  font-size: 9px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.pt-switcher-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pt-switcher-row {
+  display: flex;
+  gap: 3px;
+}
+
+.pt-switcher-btn {
+  flex: 1;
+  text-align: center;
+  padding: clamp(2px, 0.4dvh, 4px) 2px;
+  border-radius: 5px;
+  font-size: clamp(9.5px, 1.1dvh, 10.5px);
+  font-weight: 500;
+  background: transparent;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.pt-switcher-btn.is-active {
+  background: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+  font-weight: 600;
+}
+
+/* Lookup & Error States */
+.pt-lookup-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  margin: 20px 0;
+}
+
+.pt-lookup-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.pt-lookup-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pt-lookup-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.pt-lookup-btn {
+  padding: 0 16px;
+  min-height: 44px;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pt-error-banner {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: center;
+  margin: 8px 0;
+}
+
+/* Responsive refinements for short mobile viewports */
 @media (max-height: 680px) {
-  .pt-shell { padding: 4px 0; }
   .pt-page {
-    --pt-g: 5px; --pt-cy: 5px; --pt-r: 14px; --pt-r-sm: 10px; --pt-ico: 30px; --pt-ico-sm: 28px; --pt-avatar: 28px;
-    --pt-h1: 14px; --pt-h2: 13px; --pt-tok: 40px; --pt-pos: 18px; --pt-pill: 12px; --pt-tc-t: 6px; --pt-tc-b: 6px;
-    --pt-cell-y: 3px; --pt-msg-y: 5px; --pt-btn-y: 6px; --pt-pill-y: 4px;
-    --pt-sm: 5px; --pt-md: 6px; --pt-gs: 5px; --pt-tiny: 1px;
+    padding: 5px 8px;
+  }
+  .pt-hero-section {
+    padding: 5px 8px;
+  }
+  .pt-hero-token {
+    font-size: 38px;
+    margin: 1px 0;
+  }
+  .pt-queue-pos-card {
+    padding: 5px 6px;
+  }
+  .pt-pos-col {
+    padding: 3px 2px;
+  }
+  .pt-pos-token {
+    font-size: 16px;
+  }
+  .pt-switcher-panel {
+    padding: 3px 5px;
   }
 }
-@media (max-height: 620px) {
-  .pt-page { --pt-cy: 4px; --pt-tok: 38px; --pt-btn-y: 5px; --pt-g: 4px; }
+
+/* ============================================================
+   WAITING ROOM TV DISPLAY: 60/40 VISUAL HIERARCHY & CLINICAL DASHBOARD
+   ============================================================ */
+
+.tv-shell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: #f8fafc;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(8px, 1.2dvh, 16px) clamp(12px, 1.6vw, 24px);
+  box-sizing: border-box;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Inter', system-ui, sans-serif;
 }
-@media (max-height: 580px) {
-  .pt-page {
-    --pt-g: 4px; --pt-cy: 4px; --pt-ico: 28px; --pt-tok: 36px; --pt-pos: 17px; --pt-btn-y: 5px; --pt-md: 5px;
-  }
+
+/* 1. Header (Compact, clean hospital branding) */
+.tv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: clamp(4px, 0.8dvh, 8px);
+  border-bottom: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
 }
-@media (max-width: 400px) {
-  .pt-page { --pt-nx: 10px; }
+
+.tv-header-brand {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1vw, 12px);
 }
+
+.tv-logo-badge {
+  width: clamp(28px, 3.8dvh, 36px);
+  height: clamp(28px, 3.8dvh, 36px);
+  border-radius: 7px;
+  background: #0f766e;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tv-hospital-title {
+  font-size: clamp(15px, 2dvh, 20px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.tv-hospital-sub {
+  font-size: clamp(10px, 1.15dvh, 11.5px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.tv-header-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vw, 16px);
+}
+
+.tv-room-badge {
+  background: #0f766e;
+  color: #ffffff;
+  font-size: clamp(11px, 1.3dvh, 13px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: clamp(2px, 0.4dvh, 4px) clamp(8px, 0.8vw, 10px);
+  border-radius: 5px;
+}
+
+.tv-live-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1.5px solid #ccfbf1;
+  font-size: clamp(10.5px, 1.25dvh, 12.5px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: clamp(2px, 0.4dvh, 4px) clamp(7px, 0.7vw, 10px);
+  border-radius: 999px;
+}
+
+.tv-clock-display {
+  text-align: right;
+}
+
+.tv-clock-time {
+  font-size: clamp(16px, 2.2dvh, 22px);
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.tv-clock-dept {
+  font-size: clamp(10px, 1.15dvh, 11.5px);
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* 2. Main Top Area (~80% usable height, 45% left / 55% right split) */
+.tv-main-grid {
+  display: grid;
+  grid-template-columns: 45fr 55fr;
+  gap: clamp(10px, 1.4vw, 18px);
+  flex: 80 1 0;
+  min-height: 0;
+  margin: clamp(4px, 0.7dvh, 8px) 0;
+}
+
+/* Left: Now Serving Card (≈ 45% width, visual focal point) */
+.tv-serving-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: clamp(10px, 1.6dvh, 22px) clamp(14px, 1.8vw, 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+}
+
+.tv-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: clamp(3px, 0.6dvh, 6px);
+  flex-shrink: 0;
+}
+
+.tv-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(12.5px, 1.6dvh, 16px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.tv-serving-badge {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #ccfbf1;
+  font-size: clamp(9.5px, 1.15dvh, 12px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.tv-serving-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: clamp(4px, 0.8dvh, 12px);
+  flex: 1 1 auto;
+  padding: clamp(4px, 0.8dvh, 12px) 0;
+}
+
+.tv-serving-token {
+  font-size: clamp(64px, 8.2vw, 108px);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+
+.tv-serving-name {
+  font-size: clamp(20px, 2.8dvh, 32px);
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: clamp(2px, 0.4dvh, 6px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.tv-serving-meta {
+  font-size: clamp(12px, 1.45dvh, 16px);
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.tv-serving-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f766e;
+  color: #ffffff;
+  padding: clamp(5px, 0.75dvh, 9px) clamp(14px, 1.6vw, 22px);
+  border-radius: 999px;
+  font-size: clamp(11.5px, 1.45dvh, 15px);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
+  margin-top: clamp(2px, 0.4dvh, 6px);
+}
+
+.tv-serving-status-pill.is-waiting {
+  background: #f1f5f9;
+  color: #64748b;
+  box-shadow: none;
+  border: 1px solid #e2e8f0;
+}
+
+/* Right: Next In Line Table (≈ 55% width, shows at least 15 tokens simultaneously) */
+.tv-queue-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: clamp(8px, 1.1dvh, 14px) clamp(10px, 1.3vw, 18px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+  min-height: 0;
+}
+
+.tv-queue-count-badge {
+  font-size: clamp(10.5px, 1.2dvh, 12px);
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.04em;
+}
+
+.tv-table-head {
+  display: grid;
+  grid-template-columns: clamp(54px, 4.8vw, 72px) 1fr clamp(80px, 7.8vw, 105px) clamp(74px, 6.8vw, 96px);
+  align-items: center;
+  padding: clamp(3px, 0.4dvh, 5px) clamp(4px, 0.5vw, 8px);
+  font-size: clamp(9.5px, 1.15dvh, 11px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.tv-table-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tv-queue-row {
+  display: grid;
+  grid-template-columns: clamp(54px, 4.8vw, 72px) 1fr clamp(80px, 7.8vw, 105px) clamp(74px, 6.8vw, 96px);
+  align-items: center;
+  padding: 0 clamp(4px, 0.5vw, 8px);
+  height: clamp(19px, 2.75dvh, 29px);
+  border-bottom: 1px solid #f1f5f9;
+  font-size: clamp(11px, 1.42dvh, 13.5px);
+  box-sizing: border-box;
+}
+
+.tv-queue-row:nth-child(even) {
+  background-color: #f8fafc;
+}
+
+.tv-queue-row.is-first {
+  background-color: #f0fdfa;
+  border-left: 3px solid #0f766e;
+}
+
+.tv-row-token {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.tv-row-patient {
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+}
+
+.tv-walkin-tag {
+  margin-left: 5px;
+  font-size: 9px;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.tv-row-time {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.tv-row-wait {
+  font-weight: 700;
+  color: #0f766e;
+  text-align: right;
+}
+
+.tv-empty-queue {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* 3. Status Bar */
+.tv-status-bar {
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: clamp(3px, 0.5dvh, 6px) clamp(12px, 1.4vw, 20px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: clamp(10.5px, 1.3dvh, 12.5px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-bottom: clamp(4px, 0.7dvh, 8px);
+}
+
+.tv-status-count {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.tv-status-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #34d399;
+}
+
+.tv-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+/* 4. Supporting Information (~20% usable height, two clean cards) */
+.tv-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(10px, 1.4vw, 18px);
+  flex: 20 1 0;
+  min-height: 0;
+}
+
+.tv-track-card,
+.tv-notice-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: clamp(8px, 1.2dvh, 14px) clamp(14px, 1.8vw, 24px);
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 1.8vw, 22px);
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+}
+
+.tv-qr-box {
+  width: clamp(75px, 11dvh, 110px);
+  height: clamp(75px, 11dvh, 110px);
+  background: #ffffff;
+  padding: clamp(3px, 0.5dvh, 5px);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.tv-qr-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: #94a3b8;
+}
+
+.tv-fallback-icon {
+  width: clamp(34px, 5dvh, 50px);
+  height: clamp(34px, 5dvh, 50px);
+}
+
+.tv-track-info,
+.tv-notice-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.tv-notice-icon-box {
+  width: clamp(58px, 8.8dvh, 85px);
+  height: clamp(58px, 8.8dvh, 85px);
+  border-radius: 12px;
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1.5px solid #ccfbf1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
+}
+
+.tv-speaker-icon {
+  width: clamp(28px, 4.4dvh, 40px);
+  height: clamp(28px, 4.4dvh, 40px);
+}
+
+.tv-info-title {
+  font-size: clamp(15px, 2.1dvh, 22px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #0f172a;
+  line-height: 1.16;
+}
+
+.tv-info-sub {
+  font-size: clamp(11.5px, 1.55dvh, 15px);
+  color: #475569;
+  font-weight: 500;
+  line-height: 1.35;
+  margin-top: clamp(2px, 0.4dvh, 5px);
+}
+
+

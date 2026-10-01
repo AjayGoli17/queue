@@ -5,7 +5,8 @@ const API_BASE = '/api';
 export async function fetchQueueOverview(doctorId: string = 'dr-kumar'): Promise<QueueOverview> {
   const res = await fetch(`${API_BASE}/queue/overview?doctor_id=${doctorId}`);
   if (!res.ok) {
-    throw new Error(`Failed to fetch queue overview: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch queue overview (${res.statusText})`);
   }
   return res.json();
 }
@@ -13,8 +14,11 @@ export async function fetchQueueOverview(doctorId: string = 'dr-kumar'): Promise
 export async function fetchPatientTracking(token: string): Promise<PatientTrackingInfo> {
   const res = await fetch(`${API_BASE}/queue/patient/${encodeURIComponent(token.trim().toUpperCase())}`);
   if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error(`Patient not found. Please check your token or contact reception.`);
+    }
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Patient not found.`);
+    throw new Error(errorData.error || `Unable to retrieve patient tracking.`);
   }
   return res.json();
 }
@@ -120,7 +124,7 @@ export async function importAppointmentsCsv(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Unable to import this file. Please check the required columns.`);
+    throw new Error(err.error || `Import failed: server returned ${res.status}`);
   }
   return res.json();
 }
@@ -169,6 +173,19 @@ export async function resetDemoData(mode: 'active_demo' | 'all_booked' = 'active
   });
   if (!res.ok) {
     throw new Error(`Failed to reset demo data: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function deleteAllAppointments(doctorId?: string): Promise<{ success: boolean; count: number; message: string }> {
+  const query = doctorId && doctorId !== 'ALL' ? `?doctor_id=${encodeURIComponent(doctorId)}` : '';
+  const res = await fetch(`${API_BASE}/queue/all${query}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to delete appointments`);
   }
   return res.json();
 }
