@@ -23,7 +23,7 @@ interface PatientTrackingPageProps {
 }
 
 /** Design width of the mobile reference. The UI stays this wide on desktop and is centred. */
-const PHONE_WIDTH = 390;
+const PHONE_WIDTH = 420;
 
 const C = {
   navy: '#0f1b2d',
@@ -38,15 +38,15 @@ const C = {
 
 const cardStyle: React.CSSProperties = {
   background: '#fff',
-  borderRadius: 22,
+  borderRadius: 'var(--pt-r)',
   border: `1px solid ${C.border}`,
-  boxShadow: '0 1px 2px rgba(15,27,45,0.04), 0 6px 18px rgba(15,27,45,0.04)',
+  boxShadow: '0 1px 2px rgba(15,27,45,0.04), 0 4px 14px rgba(15,27,45,0.04)',
 };
 
 const labelStyle: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
-  letterSpacing: '0.12em',
+  letterSpacing: '0.1em',
   textTransform: 'uppercase',
   color: C.muted,
 };
@@ -226,14 +226,14 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
       style={{
         flex: 1,
         textAlign: 'center',
-        padding: '10px 4px',
-        borderRadius: 16,
+        padding: 'var(--pt-cell-y) 4px',
+        borderRadius: 'var(--pt-r-sm)',
         background: emphasis ? C.teal : 'transparent',
         color: emphasis ? '#fff' : C.navy,
       }}
     >
       <div style={{ ...labelStyle, fontSize: 10, color: emphasis ? 'rgba(255,255,255,0.8)' : C.muted }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'inherit', lineHeight: 1.2, marginTop: 4 }}>
+      <div style={{ fontSize: 'var(--pt-pos)', fontWeight: 800, fontFamily: 'inherit', lineHeight: 1.15, marginTop: 'var(--pt-tiny)' }}>
         {token || '—'}
       </div>
       <div style={{ fontSize: 12, fontWeight: 500, marginTop: 2, color: emphasis ? 'rgba(255,255,255,0.85)' : C.muted }}>
@@ -252,33 +252,33 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
 
   return (
     // Outer wrapper: light background, content stays phone-width and centred on any viewport
-    <div style={{ width: '100%', background: C.page, minHeight: '100%' }}>
+    <div className="pt-page" style={{ width: '100%', background: C.page, minHeight: '100%' }}>
       <div
         style={{
           width: '100%',
           maxWidth: PHONE_WIDTH,
           margin: '0 auto',
-          padding: '4px 16px 28px',
+          padding: '0 var(--pt-cx)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
+          gap: 'var(--pt-g)',
           color: C.navy,
           boxSizing: 'border-box',
           overflowX: 'hidden',
         }}
       >
         {/* 1. HOSPITAL HEADER */}
-        <div style={{ ...cardStyle, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              width: 40, height: 40, borderRadius: 12, background: C.paleBlue,
+              width: 'var(--pt-ico)', height: 'var(--pt-ico)', borderRadius: 'var(--pt-r-sm)', background: C.paleBlue,
               display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.teal, flexShrink: 0,
             }}
           >
             <Cross size={20} strokeWidth={2.5} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 'var(--pt-h1)', fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {d?.hospital_name || 'City Care Hospital'}
             </div>
             <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Patient Live Queue</div>
@@ -294,7 +294,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
           </div>
           <div
             style={{
-              width: 34, height: 34, borderRadius: 999, background: C.paleBlue, color: C.muted,
+              width: 'var(--pt-avatar)', height: 'var(--pt-avatar)', borderRadius: 999, background: C.paleBlue, color: C.muted,
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
           >
@@ -304,8 +304,8 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
 
         {/* TOKEN LOOKUP — only when there is no result to show (preserves existing token search) */}
         {!d && (
-          <div style={{ ...cardStyle, padding: 16 }}>
-            <div style={{ ...labelStyle, marginBottom: 10 }}>Enter your token</div>
+          <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)' }}>
+            <div style={{ ...labelStyle, marginBottom: 'var(--pt-sm)' }}>Enter your token</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="text"
@@ -315,7 +315,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                 placeholder="e.g. A07"
                 maxLength={6}
                 style={{
-                  flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 14, border: `1px solid ${C.border}`,
+                  flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 'var(--pt-r-sm)', border: `1px solid ${C.border}`,
                   background: C.panelBlue, fontSize: 18, fontWeight: 700, textAlign: 'center', textTransform: 'uppercase', color: C.navy,
                 }}
               />
@@ -323,7 +323,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                 onClick={() => handleSearch()}
                 disabled={loading}
                 style={{
-                  padding: '0 16px', borderRadius: 14, background: C.teal, color: '#fff', fontWeight: 700, fontSize: 12,
+                  padding: '0 16px', minHeight: 44, borderRadius: 'var(--pt-r-sm)', background: C.teal, color: '#fff', fontWeight: 700, fontSize: 12,
                   display: 'flex', alignItems: 'center', gap: 6, opacity: loading ? 0.6 : 1,
                 }}
               >
@@ -335,7 +335,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         )}
 
         {errorMessage && (
-          <div style={{ ...cardStyle, padding: 14, background: '#fff1f2', borderColor: '#fecdd3', color: '#9f1239', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
+          <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', background: '#fff1f2', borderColor: '#fecdd3', color: '#9f1239', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
             {errorMessage}
           </div>
         )}
@@ -343,7 +343,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
         {d && (
           <>
             {/* 2. DEPARTMENT / UPDATE ROW */}
-            <div style={{ ...cardStyle, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <Briefcase size={16} color={C.teal} style={{ flexShrink: 0 }} />
                 <span style={{ ...labelStyle, color: C.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -354,29 +354,29 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
 
             {/* 3. YOUR TOKEN CARD */}
-            <div style={{ ...cardStyle, padding: '22px 16px 20px', textAlign: 'center' }}>
+            <div style={{ ...cardStyle, padding: 'var(--pt-tc-t) var(--pt-cx) var(--pt-tc-b)', textAlign: 'center' }}>
               <div style={labelStyle}>Your Token</div>
-              <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', marginTop: 6 }}>
+              <div style={{ fontSize: 'var(--pt-tok)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', marginTop: 'var(--pt-tiny)' }}>
                 {d.token}
               </div>
               <div
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8, background: C.tealSoft, color: C.teal,
-                  fontSize: 14, fontWeight: 700, padding: '7px 16px', borderRadius: 999, marginTop: 10,
+                  fontSize: 'var(--pt-pill)', fontWeight: 700, padding: 'var(--pt-pill-y) 16px', borderRadius: 999, marginTop: 'var(--pt-sm)',
                 }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: C.teal }} />
                 {statusPill}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14, fontSize: 13, color: C.muted }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 'var(--pt-md)', fontSize: 13, color: C.muted }}>
                 <Clock size={15} />
                 <span>{waitLine}</span>
               </div>
             </div>
 
             {/* 4. LIVE QUEUE POSITION */}
-            <div style={{ ...cardStyle, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--pt-sm)' }}>
                 <span style={labelStyle}>Live Queue Position</span>
                 <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>{d.room} Corridor</span>
               </div>
@@ -389,8 +389,8 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
               </div>
               <div
                 style={{
-                  marginTop: 12, background: C.panelBlue, borderRadius: 14, padding: '11px 14px',
-                  fontSize: 13, color: C.navy, fontWeight: 500, lineHeight: 1.45, textAlign: 'center',
+                  marginTop: 'var(--pt-md)', background: C.panelBlue, borderRadius: 'var(--pt-r-sm)', padding: 'var(--pt-msg-y) 14px',
+                  fontSize: 13, color: C.navy, fontWeight: 500, lineHeight: 1.4, textAlign: 'center',
                 }}
               >
                 {d.message}
@@ -398,7 +398,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
 
             {/* 5. QUEUE PROGRESS ROW */}
-            <div style={{ ...cardStyle, padding: '14px 16px', display: 'flex', alignItems: 'center' }}>
+            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center' }}>
               {progressSteps.map((label, i) => {
                 const done = i < progressIndex;
                 const current = i === progressIndex;
@@ -431,17 +431,17 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
 
             {/* 6. APPOINTMENT CARD */}
-            <div style={{ ...cardStyle, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ ...cardStyle, padding: 'var(--pt-cy) var(--pt-cx)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div
                 style={{
-                  width: 42, height: 42, borderRadius: 12, background: C.paleBlue, color: C.teal,
+                  width: 'var(--pt-ico)', height: 'var(--pt-ico)', borderRadius: 'var(--pt-r-sm)', background: C.paleBlue, color: C.teal,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}
               >
                 <CalendarDays size={20} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 'var(--pt-h2)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {d.appointment_time || (d.is_walk_in ? 'Walk-in' : '—')} • {d.doctor_name}
                 </div>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
@@ -452,9 +452,9 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
 
             {/* 7. NOTIFICATION / RECEPTION ROW */}
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ ...cardStyle, flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 'var(--pt-g)' }}>
+              <div style={{ ...cardStyle, flex: 1, padding: 'var(--pt-cy) var(--pt-nx)', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 'var(--pt-ico-sm)', height: 'var(--pt-ico-sm)', borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <MessageSquare size={17} />
                 </div>
                 <div style={{ minWidth: 0 }}>
@@ -462,8 +462,8 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                   <div style={{ fontSize: 11, color: C.muted }}>Registered number</div>
                 </div>
               </div>
-              <div style={{ ...cardStyle, flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ ...cardStyle, flex: 1, padding: 'var(--pt-cy) var(--pt-nx)', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 'var(--pt-ico-sm)', height: 'var(--pt-ico-sm)', borderRadius: 10, background: C.paleBlue, color: C.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Headset size={17} />
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>Reception</div>
@@ -472,14 +472,14 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
             </div>
 
             {/* 8. CLINICAL STATE SWITCHER (read-only; reflects the patient's real state) */}
-            <div style={{ background: C.panelBlue, borderRadius: 22, padding: 16, border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ background: C.panelBlue, borderRadius: 'var(--pt-r)', padding: 'var(--pt-cy) var(--pt-cx)', border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--pt-sm)' }}>
                 <span style={labelStyle}>Clinical State Switcher</span>
                 <span style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>Patient Mode</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--pt-gs)' }}>
                 {SWITCHER_ROWS.map((row, r) => (
-                  <div key={r} style={{ display: 'flex', gap: 8 }}>
+                  <div key={r} style={{ display: 'flex', gap: 'var(--pt-gs)' }}>
                     {row.map((s) => {
                       const active = switcherState === s.key;
                       return (
@@ -487,7 +487,7 @@ export const PatientTrackingPage: React.FC<PatientTrackingPageProps> = ({ initia
                           key={s.key}
                           aria-current={active ? 'true' : undefined}
                           style={{
-                            flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 12, fontSize: 12.5, fontWeight: 600,
+                            flex: 1, textAlign: 'center', padding: 'var(--pt-btn-y) 4px', borderRadius: 'var(--pt-r-sm)', fontSize: 12.5, fontWeight: 600,
                             background: active ? C.teal : '#fff', color: active ? '#fff' : C.navy,
                             border: `1px solid ${active ? C.teal : C.border}`, whiteSpace: 'nowrap',
                           }}

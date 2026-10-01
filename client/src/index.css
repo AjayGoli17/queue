@@ -41,3 +41,78 @@
 .animate-soft-pulse {
   animation: soft-pulse 2.5s infinite ease-in-out;
 }
+
+/* Patient tracking page: height-aware compact sizing (visual only) */
+.pt-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(4px, 1.2dvh, 14px) 0;
+}
+
+.pt-page {
+  line-height: 1.3;
+  --pt-g: clamp(5px, 1.3dvh, 12px);
+  --pt-cx: clamp(12px, 3.6vw, 16px);
+  --pt-cy: clamp(6px, 1.5dvh, 14px);
+  --pt-r: clamp(14px, 2.4dvh, 20px);
+  --pt-r-sm: clamp(10px, 1.6dvh, 14px);
+  --pt-ico: clamp(30px, 4.6dvh, 40px);
+  --pt-ico-sm: clamp(28px, 3.8dvh, 34px);
+  --pt-avatar: clamp(28px, 3.8dvh, 34px);
+  --pt-h1: clamp(14px, 1.9dvh, 16px);
+  --pt-h2: clamp(13px, 1.7dvh, 15px);
+  --pt-tok: clamp(40px, 8dvh, 64px);
+  --pt-pos: clamp(18px, 2.7dvh, 24px);
+  --pt-pill: clamp(12px, 1.6dvh, 14px);
+  --pt-pill-y: clamp(4px, 0.8dvh, 7px);
+  --pt-tc-t: clamp(8px, 2dvh, 20px);
+  --pt-tc-b: clamp(8px, 1.8dvh, 18px);
+  --pt-tiny: clamp(1px, 0.4dvh, 4px);
+  --pt-sm: clamp(5px, 1.1dvh, 10px);
+  --pt-md: clamp(6px, 1.4dvh, 12px);
+  --pt-gs: clamp(5px, 0.9dvh, 8px);
+  --pt-cell-y: clamp(4px, 1dvh, 10px);
+  --pt-msg-y: clamp(5px, 1.2dvh, 10px);
+  --pt-btn-y: clamp(6px, 1.2dvh, 10px);
+  --pt-nx: 14px;
+}
+
+/* Progressively more compact on shorter viewports */
+@media (max-height: 940px) {
+  .pt-shell { padding: 10px 0; }
+  .pt-page {
+    --pt-g: 9px; --pt-cy: 11px; --pt-r: 18px; --pt-ico: 38px;
+    --pt-tok: 58px; --pt-pos: 23px; --pt-tc-t: 14px; --pt-tc-b: 12px;
+    --pt-cell-y: 7px; --pt-msg-y: 8px; --pt-btn-y: 8px; --pt-pill-y: 6px;
+    --pt-sm: 8px; --pt-md: 10px; --pt-gs: 8px;
+  }
+}
+@media (max-height: 800px) {
+  .pt-shell { padding: 9px 0; }
+  .pt-page {
+    --pt-g: 6px; --pt-cy: 8px; --pt-r: 16px; --pt-ico: 34px; --pt-ico-sm: 30px; --pt-avatar: 30px;
+    --pt-tok: 52px; --pt-pos: 21px; --pt-tc-t: 8px; --pt-tc-b: 8px;
+    --pt-cell-y: 5px; --pt-msg-y: 7px; --pt-btn-y: 7px; --pt-pill-y: 5px;
+    --pt-sm: 7px; --pt-md: 8px; --pt-gs: 7px; --pt-tiny: 2px;
+  }
+}
+@media (max-height: 680px) {
+  .pt-shell { padding: 4px 0; }
+  .pt-page {
+    --pt-g: 5px; --pt-cy: 5px; --pt-r: 14px; --pt-r-sm: 10px; --pt-ico: 30px; --pt-ico-sm: 28px; --pt-avatar: 28px;
+    --pt-h1: 14px; --pt-h2: 13px; --pt-tok: 40px; --pt-pos: 18px; --pt-pill: 12px; --pt-tc-t: 6px; --pt-tc-b: 6px;
+    --pt-cell-y: 3px; --pt-msg-y: 5px; --pt-btn-y: 6px; --pt-pill-y: 4px;
+    --pt-sm: 5px; --pt-md: 6px; --pt-gs: 5px; --pt-tiny: 1px;
+  }
+}
+@media (max-height: 620px) {
+  .pt-page { --pt-cy: 4px; --pt-tok: 38px; --pt-btn-y: 5px; --pt-g: 4px; }
+}
+@media (max-height: 580px) {
+  .pt-page {
+    --pt-g: 4px; --pt-cy: 4px; --pt-ico: 28px; --pt-tok: 36px; --pt-pos: 17px; --pt-btn-y: 5px; --pt-md: 5px;
+  }
+}
+@media (max-width: 400px) {
+  .pt-page { --pt-nx: 10px; }
+}

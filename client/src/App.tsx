@@ -113,7 +113,7 @@ export function App() {
         <Route
           path="/track/:token"
           element={
-            <div className="min-h-screen bg-slate-50 text-slate-900 py-6 px-4">
+            <div className="pt-shell bg-slate-50 text-slate-900">
               <PatientTrackingPage />
             </div>
           }
