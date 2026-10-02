@@ -1,0 +1,331 @@
+diff --git a/.gitignore b/.gitignore
+index 2752eb9..e1eb8d5 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -2 +2,7 @@ node_modules/
+ .DS_Store
++
++# Build output & embedded PGlite runtime data (regenerated at startup)
++client/dist/
++dist/
++data/
++.env
+diff --git a/DEPLOY.md b/DEPLOY.md
+new file mode 100644
+index 0000000..c13656e
+--- /dev/null
++++ b/DEPLOY.md
+@@ -0,0 +1,82 @@
++# Deploying the hospital queue demo to Render (one free Web Service)
++
++One service runs Express (API + `/ws` WebSocket) and serves the built React app
++(`client/dist`). The database is the existing embedded PGlite. No UI, routes,
++queue logic or WebSocket protocol was changed.
++
++## 0. After applying the patch (one time)
++
++```bash
++git apply deploy-render.patch
++git ls-files data      # is the generated PGlite folder tracked by Git?
++```
++
++- If `git ls-files data` prints nothing, do nothing more for `data/`.
++- Only if it prints files, untrack them (the files stay on disk):
++
++  ```bash
++  git rm -r --cached data
++  ```
++
++Then commit and push:
++
++```bash
++git add -A && git commit -m "Render deployment support" && git push
++```
++
++`data/` is now in `.gitignore`. Leaving it tracked is harmless on Render (the Blueprint
++points PGlite at `/tmp/pgdata`), it just adds noise to the repository.
++
++## 1. Create the service
++
++**A. Blueprint (recommended):** Render Dashboard -> New -> Blueprint -> pick the repo.
++Render reads `render.yaml` and creates `hospital-queue-demo` on the free plan.
++
++**B. Manual:** New -> Web Service -> pick the repo, then set:
++
++| Setting | Value |
++| --- | --- |
++| Runtime | Node |
++| Instance type | Free |
++| Build Command | `npm ci && npm run build` |
++| Start Command | `npm start` |
++| Health Check Path | `/health` |
++
++Environment variables (both options):
++
++| Key | Value | Why |
++| --- | --- | --- |
++| `NODE_VERSION` | `22.12.0` | Vite 8 needs Node >= 20.19 |
++| `PGLITE_DATA_DIR` | `/tmp/pgdata` | Writable runtime path for PGlite (optional) |
++
++`PORT` is provided by Render. The root build script runs `npm ci --prefix client --include=dev`
++(lockfile-exact, and includes the client's Vite/TypeScript build tools even when `NODE_ENV=production`). Do not set `DATABASE_URL` (if set, the app uses that Postgres instead of PGlite).
++
++## 2. Test (replace YOUR-APP)
++
++1. `https://YOUR-APP.onrender.com/health` returns `{"status":"healthy",...}`
++2. `/reception` loads (refresh must not 404)
++3. `/display` loads
++4. `/track/A07` loads and shows Meena Das
++5. Realtime: open all three in separate tabs/devices; on `/reception` use CALL NEXT,
++   add a walk-in, or set doctor delay. `/display` and `/track/...` update immediately
++   (the browser console shows `QUEUE_UPDATED`; the socket is `wss://YOUR-APP.onrender.com/ws`).
++
++## Free-tier behaviour to know before a demo
++
++- The service sleeps after ~15 min idle; the first request then takes ~30-60 s.
++  Open the URL a few minutes before the demo. Open pages reconnect automatically.
++- PGlite data on Render is ephemeral by design (this is a demo, not a production
++  hospital deployment). On every start the app runs its existing seed and
++  re-creates the standard `active_demo` state (A01-A10). Use the existing Demo
++  Reset menu during a demo.
++- Run a single instance only (in-process WebSocket broadcast + embedded DB).
++
++## Local development (unchanged)
++
++```bash
++npm install && npm install --prefix client
++npm run dev            # Vite on :3000, API on :5001
++```
++
++Local production check: `npm run build && npm start`, then open http://localhost:5001/reception.
+diff --git a/package-lock.json b/package-lock.json
+index 75d7dba..7b4ca29 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -15,2 +15,3 @@
+         "pg": "^8.13.3",
++        "tsx": "^4.19.3",
+         "ws": "^8.22.0"
+@@ -24,4 +25,6 @@
+         "concurrently": "^9.1.2",
+-        "tsx": "^4.19.3",
+         "typescript": "^5.7.3"
++      },
++      "engines": {
++        "node": ">=20.19.0"
+       }
+@@ -41,3 +44,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -58,3 +60,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -75,3 +76,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -92,3 +92,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -109,3 +108,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -126,3 +124,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -143,3 +140,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -160,3 +156,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -177,3 +172,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -194,3 +188,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -211,3 +204,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -228,3 +220,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -245,3 +236,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -262,3 +252,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -279,3 +268,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -296,3 +284,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -313,3 +300,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -330,3 +316,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -347,3 +332,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -364,3 +348,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -381,3 +364,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -398,3 +380,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -415,3 +396,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -432,3 +412,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -449,3 +428,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -466,3 +444,2 @@
+       ],
+-      "dev": true,
+       "license": "MIT",
+@@ -986,3 +963,2 @@
+       "integrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+-      "dev": true,
+       "hasInstallScript": true,
+@@ -1135,3 +1111,2 @@
+       "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+-      "dev": true,
+       "hasInstallScript": true,
+@@ -1896,3 +1871,2 @@
+       "integrity": "sha512-Yiex1Ovn8z2xPpOWckIiysV1SSyRMY9BkLF++q0yKiDxCqRhosKfMg3janKkiLBwZ5c/YryloKwGZcrEmtwxKw==",
+-      "dev": true,
+       "license": "MIT",
+diff --git a/package.json b/package.json
+index a1ea03e..e6cfae8 100644
+--- a/package.json
++++ b/package.json
+@@ -9,3 +9,4 @@
+     "client": "npm run dev --prefix client",
+-    "build": "npm run build --prefix client",
++    "build": "npm ci --prefix client --include=dev && npm run build --prefix client",
++    "start": "tsx server/src/index.ts",
+     "seed": "tsx server/src/seed/seedData.ts",
+@@ -13,2 +14,5 @@
+   },
++  "engines": {
++    "node": ">=20.19.0"
++  },
+   "dependencies": {
+@@ -18,2 +22,3 @@
+     "express": "^4.21.2",
++    "tsx": "^4.19.3",
+     "pg": "^8.13.3",
+@@ -28,3 +33,2 @@
+     "concurrently": "^9.1.2",
+-    "tsx": "^4.19.3",
+     "typescript": "^5.7.3"
+diff --git a/render.yaml b/render.yaml
+new file mode 100644
+index 0000000..9843db4
+--- /dev/null
++++ b/render.yaml
+@@ -0,0 +1,15 @@
++# Render Blueprint: one free Web Service running Express + built React + WebSocket + PGlite.
++services:
++  - type: web
++    name: hospital-queue-demo
++    runtime: node
++    plan: free
++    buildCommand: npm ci && npm run build
++    startCommand: npm start
++    healthCheckPath: /health
++    envVars:
++      - key: NODE_VERSION
++        value: 22.12.0
++      # PGlite writes here; ephemeral by design (demo data is re-seeded on every start).
++      - key: PGLITE_DATA_DIR
++        value: /tmp/pgdata
+diff --git a/server/src/config/database.ts b/server/src/config/database.ts
+index 27fcf3a..c142726 100644
+--- a/server/src/config/database.ts
++++ b/server/src/config/database.ts
+@@ -90,3 +90,5 @@ export async function getDatabase(): Promise<IDatabaseClient> {
+   // Use embedded PostgreSQL engine (PGlite) with persistence directory
+-  const dataDir = path.resolve(process.cwd(), 'data', 'pgdata');
++  const dataDir = process.env.PGLITE_DATA_DIR
++    ? path.resolve(process.env.PGLITE_DATA_DIR)
++    : path.resolve(process.cwd(), 'data', 'pgdata');
+   if (!fs.existsSync(dataDir)) {
+diff --git a/server/src/index.ts b/server/src/index.ts
+index 0f98740..277ee97 100644
+--- a/server/src/index.ts
++++ b/server/src/index.ts
+@@ -4,2 +4,4 @@ import dotenv from 'dotenv';
+ import http from 'http';
++import path from 'path';
++import fs from 'fs';
+ import apiRoutes from './routes/api.js';
+@@ -13,3 +15,3 @@ const app = express();
+ const server = http.createServer(app);
+-const PORT = process.env.PORT || 5001;
++const PORT = Number(process.env.PORT || 5001);
+ 
+@@ -27,2 +29,23 @@ app.get('/health', (_req, res) => {
+ 
++// Serve the built React frontend (client/dist) from the same service in production.
++// Only active when a production build exists, so local dev (Vite on :3000) is unaffected.
++const clientDist = path.resolve(__dirname, '../../client/dist');
++const clientIndex = path.join(clientDist, 'index.html');
++
++if (fs.existsSync(clientIndex)) {
++  app.use(express.static(clientDist));
++
++  // SPA fallback: /reception, /display, /track/:token etc. -> index.html.
++  // /api/* and /ws are never handled here (/ws is an HTTP upgrade handled by the ws server).
++  app.get(/^\/(?!api(\/|$)|ws(\/|$)|assets\/|health$).*/, (_req, res) => {
++    res.sendFile(clientIndex);
++  });
++  console.log(`Serving frontend build from ${clientDist}`);
++}
++
++// Unknown API routes should return JSON 404, never the SPA HTML
++app.use('/api', (_req, res) => {
++  res.status(404).json({ error: 'Not found' });
++});
++
+ // Startup & Initialization
+@@ -40,3 +63,3 @@ async function startServer() {
+ 
+-    server.listen(PORT, () => {
++    server.listen(PORT, '0.0.0.0', () => {
+       console.log(`🚀 Hospital Queue API & Realtime Server running at http://localhost:${PORT}`);

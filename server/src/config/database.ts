@@ -88,7 +88,9 @@ export async function getDatabase(): Promise<IDatabaseClient> {
   }
 
   // Use embedded PostgreSQL engine (PGlite) with persistence directory
-  const dataDir = path.resolve(process.cwd(), 'data', 'pgdata');
+  const dataDir = process.env.PGLITE_DATA_DIR
+    ? path.resolve(process.env.PGLITE_DATA_DIR)
+    : path.resolve(process.cwd(), 'data', 'pgdata');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }

@@ -1,2 +1,8 @@
 node_modules/
 .DS_Store
+
+# Build output & embedded PGlite runtime data (regenerated at startup)
+client/dist/
+dist/
+data/
+.env

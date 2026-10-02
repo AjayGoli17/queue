@@ -1,0 +1,15 @@
+# Render Blueprint: one free Web Service running Express + built React + WebSocket + PGlite.
+services:
+  - type: web
+    name: hospital-queue-demo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      # PGlite writes here; ephemeral by design (demo data is re-seeded on every start).
+      - key: PGLITE_DATA_DIR
+        value: /tmp/pgdata

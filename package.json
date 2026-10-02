@@ -7,15 +7,20 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run server\" \"npm run client\"",
     "server": "tsx watch server/src/index.ts",
     "client": "npm run dev --prefix client",
-    "build": "npm run build --prefix client",
+    "build": "npm ci --prefix client --include=dev && npm run build --prefix client",
+    "start": "tsx server/src/index.ts",
     "seed": "tsx server/src/seed/seedData.ts",
     "test": "tsx server/src/test_workflow.ts"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.16",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "tsx": "^4.19.3",
     "pg": "^8.13.3",
     "ws": "^8.18.1"
   },
@@ -26,7 +31,6 @@
     "@types/pg": "^8.11.11",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.1.2",
-    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }
 }
