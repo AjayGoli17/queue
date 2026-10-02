@@ -2,43 +2,82 @@ import { getDatabase } from '../config/database.js';
 import { Doctor, Patient, PatientTrackingInfo, QueueOverview, PatientStatus } from '../types/index.js';
 
 export class QueueService {
+  /**
+   * Helper to ensure the doctor and their queue record exist in the database.
+   */
+  static async ensureDoctorAndQueue(doctorId: string = 'dr-kumar'): Promise<Doctor> {
+    const db = await getDatabase();
+    await db.query(
+      `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [doctorId, 'Dr. Kumar', 'Room 2', 'Available', 15]
+    );
+
+    await db.query(
+      `INSERT INTO queues (doctor_id, current_patient_id, queue_state)
+       VALUES ($1, NULL, 'ACTIVE')
+       ON CONFLICT DO NOTHING`,
+      [doctorId]
+    );
+
+    const docRes = await db.query<Doctor>('SELECT * FROM doctors WHERE id = $1', [doctorId]);
+    return (
+      docRes.rows[0] || {
+        id: doctorId,
+        name: 'Dr. Kumar',
+        room: 'Room 2',
+        delay_status: 'Available',
+        avg_consultation_time: 15,
+      }
+    );
+  }
+
   static async getQueueOverview(doctorId: string = 'dr-kumar'): Promise<QueueOverview | null> {
     const db = await getDatabase();
+    const doctor = await QueueService.ensureDoctorAndQueue(doctorId);
 
-    // 1. Get Doctor
-    const docRes = await db.query<Doctor>('SELECT * FROM doctors WHERE id = $1', [doctorId]);
-    const doctor: Doctor = docRes.rows[0] || {
-      id: doctorId,
-      name: 'Dr. Kumar',
-      room: 'Room 2',
-      delay_status: 'Available',
-      avg_consultation_time: 15,
-    };
-
-    // 2. Get Queue
+    // Get Queue
     const queueRes = await db.query('SELECT * FROM queues WHERE doctor_id = $1 LIMIT 1', [doctorId]);
     const queue = queueRes.rows[0];
 
-    // 3. Get All Patients for doctor
+    // Get All Patients for doctor
     const patientsRes = await db.query<Patient>(
       'SELECT * FROM patients WHERE doctor_id = $1 ORDER BY id ASC',
       [doctorId]
     );
     const allPatients = patientsRes.rows;
 
-    // 4. Current Serving Patient
+    // Current Serving Patient
     let currentPatient: Patient | null = null;
     if (queue && queue.current_patient_id) {
-      currentPatient = allPatients.find(p => p.id === queue.current_patient_id) || null;
+      const match = allPatients.find(p => p.id === queue.current_patient_id);
+      if (match && (match.status === 'CALLED' || match.status === 'IN_CONSULTATION')) {
+        currentPatient = match;
+      }
     }
     if (!currentPatient) {
-      currentPatient = allPatients.find(p => p.status === 'IN_CONSULTATION' || p.status === 'CALLED') || null;
+      const activeServing = allPatients
+        .filter(p => p.status === 'IN_CONSULTATION' || p.status === 'CALLED')
+        .sort((a, b) => {
+          const timeA = new Date(a.called_at || a.updated_at || a.created_at || 0).getTime();
+          const timeB = new Date(b.called_at || b.updated_at || b.created_at || 0).getTime();
+          return timeB - timeA;
+        });
+      currentPatient = activeServing[0] || null;
     }
 
-    // 5. Next Patients in Queue (Strict FIFO: WAITING status ordered by checked_in_at ASC, id ASC)
+    // Active Queue Patients: WAITING, CHECKED_IN, and BOOKED
+    // FIFO Order: WAITING first (by checked_in_at ASC, id ASC), then CHECKED_IN, then BOOKED
+    const activeQueueStatuses = ['WAITING', 'CHECKED_IN', 'BOOKED'];
     const nextPatients = allPatients
-      .filter(p => p.status === 'WAITING' && (!currentPatient || p.id !== currentPatient.id))
+      .filter(p => activeQueueStatuses.includes(p.status) && (!currentPatient || p.id !== currentPatient.id))
       .sort((a, b) => {
+        const priorityOrder: Record<string, number> = { WAITING: 1, CHECKED_IN: 2, BOOKED: 3 };
+        const orderA = priorityOrder[a.status] || 99;
+        const orderB = priorityOrder[b.status] || 99;
+        if (orderA !== orderB) return orderA - orderB;
+
         if (a.checked_in_at && b.checked_in_at) {
           const timeA = new Date(a.checked_in_at).getTime();
           const timeB = new Date(b.checked_in_at).getTime();
@@ -51,17 +90,18 @@ export class QueueService {
         return a.id - b.id;
       });
 
-    // 6. Compute Dynamic Stats
+    // Compute Dynamic Stats
     const bookedCount = allPatients.filter(p => p.status === 'BOOKED').length;
-    const waitingCount = allPatients.filter(p => p.status === 'WAITING').length;
+    const checkedInCount = allPatients.filter(p => p.status === 'CHECKED_IN').length;
+    const waitingCount = allPatients.filter(p => p.status === 'WAITING' || p.status === 'CHECKED_IN' || p.status === 'BOOKED').length;
     const inConsultationCount = allPatients.filter(p => p.status === 'IN_CONSULTATION').length;
+    const calledCount = allPatients.filter(p => p.status === 'CALLED').length;
     const completedCount = allPatients.filter(p => p.status === 'COMPLETED').length;
     const skippedCount = allPatients.filter(p => p.status === 'SKIPPED').length;
     const noShowCount = allPatients.filter(p => p.status === 'NO_SHOW').length;
     const walkInsCount = allPatients.filter(p => p.is_walk_in).length;
-    const checkedInCount = allPatients.filter(p => p.status !== 'BOOKED').length;
 
-    // Calculate Average Waiting Time (in minutes)
+    // Average Waiting Time Calculation
     let totalWaitMinutes = 0;
     let countedPatients = 0;
     for (const p of allPatients) {
@@ -81,6 +121,7 @@ export class QueueService {
       checked_in: checkedInCount,
       waiting: waitingCount,
       in_consultation: inConsultationCount,
+      called: calledCount,
       completed: completedCount,
       skipped: skippedCount,
       no_show: noShowCount,
@@ -124,22 +165,14 @@ export class QueueService {
     }
 
     const patient = patientRes.rows[0];
-
-    // Find Doctor
-    const docRes = await db.query<Doctor>('SELECT * FROM doctors WHERE id = $1', [patient.doctor_id]);
-    const doctor = docRes.rows[0] || {
-      id: 'dr-kumar',
-      name: 'Dr. Kumar',
-      room: 'Room 2',
-      delay_status: 'Available',
-      avg_consultation_time: 15,
-    };
+    const doctorId = patient.doctor_id || 'dr-kumar';
+    const doctor = await QueueService.ensureDoctorAndQueue(doctorId);
 
     const avgConsultation = doctor.avg_consultation_time || 15;
-    const isDoctorDelayed = doctor.delay_status.toLowerCase().includes('delay');
+    const isDoctorDelayed = (doctor.delay_status || '').toLowerCase().includes('delay');
 
     // Find Queue & Current Serving Patient
-    const queueRes = await db.query('SELECT * FROM queues WHERE doctor_id = $1 LIMIT 1', [patient.doctor_id]);
+    const queueRes = await db.query('SELECT * FROM queues WHERE doctor_id = $1 LIMIT 1', [doctorId]);
     const queue = queueRes.rows[0];
 
     let currentServingPatient: Patient | null = null;
@@ -150,24 +183,32 @@ export class QueueService {
     if (!currentServingPatient) {
       const curRes = await db.query<Patient>(
         "SELECT * FROM patients WHERE doctor_id = $1 AND status IN ('IN_CONSULTATION', 'CALLED') ORDER BY updated_at DESC LIMIT 1",
-        [patient.doctor_id]
+        [doctorId]
       );
       currentServingPatient = curRes.rows[0] || null;
     }
 
     // Calculate Patients Ahead:
-    // Count all patients with status 'WAITING' who are ahead in the queue before this patient
+    // Count all active patients ahead in the queue before this patient
+    const activeQueueStatuses = ['WAITING', 'CHECKED_IN', 'BOOKED'];
     let patientsAhead = 0;
-    if (patient.status === 'WAITING') {
+
+    if (activeQueueStatuses.includes(patient.status)) {
       const waitingRes = await db.query<Patient>(
-        "SELECT * FROM patients WHERE doctor_id = $1 AND status = 'WAITING' AND id != $2",
-        [patient.doctor_id, patient.id]
+        "SELECT * FROM patients WHERE doctor_id = $1 AND status IN ('WAITING', 'CHECKED_IN', 'BOOKED') AND id != $2",
+        [doctorId, patient.id]
       );
       
       const allWaiting = waitingRes.rows;
+      const priorityOrder: Record<string, number> = { WAITING: 1, CHECKED_IN: 2, BOOKED: 3 };
+      const myPriority = priorityOrder[patient.status] || 99;
       const patientCheckIn = patient.checked_in_at ? new Date(patient.checked_in_at).getTime() : Infinity;
 
       patientsAhead = allWaiting.filter(other => {
+        const otherPriority = priorityOrder[other.status] || 99;
+        if (otherPriority < myPriority) return true;
+        if (otherPriority > myPriority) return false;
+
         const otherCheckIn = other.checked_in_at ? new Date(other.checked_in_at).getTime() : Infinity;
         if (otherCheckIn < patientCheckIn) return true;
         if (otherCheckIn === patientCheckIn) return other.id < patient.id;
@@ -175,11 +216,11 @@ export class QueueService {
       }).length;
     }
 
-    // Calculate Estimated Waiting Time (Sections 2, 3, 4, 5, 6, 8)
+    // Calculate Estimated Waiting Time
     let estimatedWaitMinutes: number | null = null;
     let estimatedWaitText: string | null = null;
 
-    if (patient.status === 'WAITING') {
+    if (activeQueueStatuses.includes(patient.status)) {
       if (patientsAhead > 0) {
         estimatedWaitMinutes = patientsAhead * avgConsultation;
         estimatedWaitText = `~${estimatedWaitMinutes} minutes`;
@@ -189,10 +230,9 @@ export class QueueService {
       }
     }
 
-    // Appointment time formatting: for walk-in patients, clearly say "Walk-in"
     const displayAppointmentTime = patient.is_walk_in ? 'Walk-in' : (patient.appointment_time || 'Walk-in');
 
-    // Messages
+    // Dynamic Guidance Messages
     let message = 'Please remain in the waiting area. You will be called when it is your turn.';
     if (isDoctorDelayed) {
       message = `${doctor.name} is currently delayed (approximately 15 minutes). Please remain in the waiting area.`;
@@ -245,15 +285,17 @@ export class QueueService {
     return res.rows[0] || null;
   }
 
-  // 2. CALL NEXT (FIFO from WAITING queue)
+  // 2. CALL NEXT (FIFO from active queue)
   static async callNext(doctorId: string = 'dr-kumar'): Promise<{ called_patient: Patient | null; message?: string }> {
     const db = await getDatabase();
+    await QueueService.ensureDoctorAndQueue(doctorId);
 
-    // Find next WAITING patient (FIFO: checked_in_at ASC, id ASC)
+    // Find next patient (FIFO: WAITING first, then CHECKED_IN, then BOOKED)
     const nextRes = await db.query<Patient>(
       `SELECT * FROM patients 
-       WHERE doctor_id = $1 AND status = 'WAITING' 
-       ORDER BY checked_in_at ASC NULLS LAST, id ASC 
+       WHERE doctor_id = $1 AND status IN ('WAITING', 'CHECKED_IN', 'BOOKED') 
+       ORDER BY CASE WHEN status = 'WAITING' THEN 1 WHEN status = 'CHECKED_IN' THEN 2 ELSE 3 END,
+                checked_in_at ASC NULLS LAST, id ASC 
        LIMIT 1`,
       [doctorId]
     );
@@ -264,14 +306,14 @@ export class QueueService {
 
     const nextPatient = nextRes.rows[0];
 
-    // If there was a previous patient in consultation, complete them
+    // If there was a previous patient in consultation or called, complete them
     const queueRes = await db.query('SELECT current_patient_id FROM queues WHERE doctor_id = $1', [doctorId]);
     const currentId = queueRes.rows[0]?.current_patient_id;
 
     if (currentId && currentId !== nextPatient.id) {
       const curPatientRes = await db.query<Patient>('SELECT status FROM patients WHERE id = $1', [currentId]);
       const curStatus = curPatientRes.rows[0]?.status;
-      if (curStatus === 'IN_CONSULTATION') {
+      if (curStatus === 'IN_CONSULTATION' || curStatus === 'CALLED') {
         await db.query(
           "UPDATE patients SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
           [currentId]
@@ -392,11 +434,11 @@ export class QueueService {
     doctorId: string = 'dr-kumar'
   ): Promise<Patient> {
     const db = await getDatabase();
+    await QueueService.ensureDoctorAndQueue(doctorId);
 
     // Determine next available token
     const tokenRes = await db.query<Patient>(
-      "SELECT token FROM patients WHERE doctor_id = $1 ORDER BY id DESC",
-      [doctorId]
+      "SELECT token FROM patients ORDER BY id DESC"
     );
 
     let maxNum = 0;
@@ -407,13 +449,6 @@ export class QueueService {
         if (num > maxNum) maxNum = num;
       }
     }
-    // Ensure doctor exists in doctors table
-    await db.query(
-      `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO NOTHING`,
-      [doctorId, 'Dr. Kumar', 'Room 2', 'Available', 15]
-    );
 
     const nextTokenNumber = maxNum + 1;
     const newToken = `A${nextTokenNumber < 10 ? '0' + nextTokenNumber : nextTokenNumber}`;
@@ -432,16 +467,11 @@ export class QueueService {
   static async importAppointments(
     rows: Array<{ patient_name: string; phone?: string; appointment_time: string; doctor_name?: string }>,
     doctorId: string = 'dr-kumar'
-  ): Promise<{ count: number; imported: Patient[] }> {
+  ): Promise<{ count: number; imported: Patient[]; errors?: string[] }> {
     const db = await getDatabase();
+    await QueueService.ensureDoctorAndQueue(doctorId);
 
-    // Ensure doctor exists in doctors table
-    await db.query(
-      `INSERT INTO doctors (id, name, room, delay_status, avg_consultation_time)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (id) DO NOTHING`,
-      [doctorId, 'Dr. Kumar', 'Room 2', 'Available', 15]
-    );
+    console.log(`[CSV IMPORT] request received for doctor: ${doctorId}, rows: ${rows.length}`);
 
     // Find highest token across ALL patients
     const tokenRes = await db.query<Patient>(
@@ -458,29 +488,55 @@ export class QueueService {
     }
 
     const imported: Patient[] = [];
+    const errors: string[] = [];
 
-    for (const row of rows) {
-      if (!row.patient_name || !row.appointment_time) continue;
-      maxNum++;
-      const token = `A${maxNum < 10 ? '0' + maxNum : maxNum}`;
-      const phone = row.phone?.trim() || '+91 98765 43200';
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 1;
 
-      const insertRes = await db.query<Patient>(
-        `INSERT INTO patients (token, patient_name, phone, doctor_id, appointment_time, status, is_walk_in)
-         VALUES ($1, $2, $3, $4, $5, 'BOOKED', FALSE)
-         RETURNING *`,
-        [token, row.patient_name.trim(), phone, doctorId, row.appointment_time.trim()]
-      );
+      if (!row.patient_name || !row.patient_name.trim()) {
+        errors.push(`Row ${rowNum}: missing Patient Name`);
+        continue;
+      }
 
-      imported.push(insertRes.rows[0]);
+      if (!row.appointment_time || !row.appointment_time.trim()) {
+        errors.push(`Row ${rowNum}: missing Appointment Time`);
+        continue;
+      }
+
+      try {
+        maxNum++;
+        const token = `A${maxNum < 10 ? '0' + maxNum : maxNum}`;
+        const phone = row.phone?.trim() || '+91 98765 00000';
+        const appointmentTime = row.appointment_time.trim();
+
+        const insertRes = await db.query<Patient>(
+          `INSERT INTO patients (token, patient_name, phone, doctor_id, appointment_time, status, is_walk_in)
+           VALUES ($1, $2, $3, $4, $5, 'BOOKED', FALSE)
+           RETURNING *`,
+          [token, row.patient_name.trim(), phone, doctorId, appointmentTime]
+        );
+
+        if (insertRes.rows[0]) {
+          imported.push(insertRes.rows[0]);
+        }
+      } catch (err: any) {
+        console.error(`[CSV IMPORT] Error inserting row ${rowNum}:`, err);
+        errors.push(`Row ${rowNum}: ${err.message || 'Database insert failed'}`);
+      }
     }
 
-    return { count: imported.length, imported };
+    if (imported.length === 0 && errors.length > 0) {
+      throw new Error(`Import failed: ${errors.join(', ')}`);
+    }
+
+    return { count: imported.length, imported, errors: errors.length > 0 ? errors : undefined };
   }
 
   // 9. Update Doctor Delay Status
   static async updateDoctorStatus(doctorId: string, delayStatus: string): Promise<Doctor | null> {
     const db = await getDatabase();
+    await QueueService.ensureDoctorAndQueue(doctorId);
     const res = await db.query<Doctor>(
       'UPDATE doctors SET delay_status = $1 WHERE id = $2 RETURNING *',
       [delayStatus, doctorId]
@@ -488,9 +544,10 @@ export class QueueService {
     return res.rows[0] || null;
   }
 
-  // 10. Update Doctor Average Consultation Time (Section 2 & 9)
+  // 10. Update Doctor Average Consultation Time
   static async updateDoctorAvgConsultationTime(doctorId: string, avgMinutes: number): Promise<Doctor | null> {
     const db = await getDatabase();
+    await QueueService.ensureDoctorAndQueue(doctorId);
     const res = await db.query<Doctor>(
       'UPDATE doctors SET avg_consultation_time = $1 WHERE id = $2 RETURNING *',
       [avgMinutes, doctorId]
@@ -498,7 +555,7 @@ export class QueueService {
     return res.rows[0] || null;
   }
 
-  // Generic update status
+  // 11. Update Patient Status
   static async updatePatientStatus(patientId: number, status: PatientStatus): Promise<Patient | null> {
     const db = await getDatabase();
     
@@ -522,15 +579,26 @@ export class QueueService {
     const updatedPatient = res.rows[0] || null;
 
     if (updatedPatient) {
+      const doctorId = updatedPatient.doctor_id || 'dr-kumar';
+      await QueueService.ensureDoctorAndQueue(doctorId);
+
       if (status === 'IN_CONSULTATION' || status === 'CALLED') {
+        // Complete any previously called or in consultation patient for this doctor
+        await db.query(
+          `UPDATE patients 
+           SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
+           WHERE doctor_id = $1 AND id != $2 AND status IN ('CALLED', 'IN_CONSULTATION')`,
+          [doctorId, updatedPatient.id]
+        );
+
         await db.query(
           'UPDATE queues SET current_patient_id = $1, updated_at = CURRENT_TIMESTAMP WHERE doctor_id = $2',
-          [updatedPatient.id, updatedPatient.doctor_id]
+          [updatedPatient.id, doctorId]
         );
       } else if (status === 'COMPLETED' || status === 'SKIPPED' || status === 'NO_SHOW') {
         await db.query(
           'UPDATE queues SET current_patient_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE doctor_id = $1 AND current_patient_id = $2',
-          [updatedPatient.doctor_id, updatedPatient.id]
+          [doctorId, updatedPatient.id]
         );
       }
     }
@@ -538,7 +606,7 @@ export class QueueService {
     return updatedPatient;
   }
 
-  // 11. Delete all appointments/patients from today's queue
+  // 12. Delete all appointments
   static async deleteAllPatients(doctorId?: string): Promise<{ count: number }> {
     const db = await getDatabase();
     if (doctorId && doctorId !== 'ALL') {

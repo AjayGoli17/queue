@@ -2,98 +2,101 @@ import type { PatientTrackingInfo, QueueOverview, PatientStatus, Patient, Doctor
 
 const API_BASE = '/api';
 
-export async function fetchQueueOverview(doctorId: string = 'dr-kumar'): Promise<QueueOverview> {
-  const res = await fetch(`${API_BASE}/queue/overview?doctor_id=${doctorId}`);
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to fetch queue overview (${res.statusText})`);
+/**
+ * Robust fetch wrapper with development error logging as specified:
+ * logs endpoint, HTTP method, status, response body, and backend error message.
+ */
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const url = `${API_BASE}${endpoint}`;
+
+  try {
+    const res = await fetch(url, options);
+
+    if (!res.ok) {
+      let errorBody: any = null;
+      let errorText = '';
+      try {
+        errorBody = await res.json();
+        errorText = errorBody.error || errorBody.message || JSON.stringify(errorBody);
+      } catch {
+        errorText = await res.text().catch(() => '');
+      }
+
+      console.error(`[API ERROR] ${method} ${url}`, {
+        endpoint,
+        method,
+        status: res.status,
+        statusText: res.statusText,
+        responseBody: errorBody || errorText,
+        backendErrorMessage: errorText || res.statusText,
+      });
+
+      const message = errorText || `Request failed with status ${res.status} (${res.statusText})`;
+      const error: any = new Error(message);
+      error.status = res.status;
+      error.responseBody = errorBody;
+      throw error;
+    }
+
+    return await res.json();
+  } catch (err: any) {
+    if (!err.status) {
+      console.error(`[API NETWORK ERROR] ${method} ${url}:`, err);
+    }
+    throw err;
   }
-  return res.json();
+}
+
+export async function fetchQueueOverview(doctorId: string = 'dr-kumar'): Promise<QueueOverview> {
+  return apiRequest<QueueOverview>(`/queue/overview?doctor_id=${encodeURIComponent(doctorId)}`);
 }
 
 export async function fetchPatientTracking(token: string): Promise<PatientTrackingInfo> {
-  const res = await fetch(`${API_BASE}/queue/patient/${encodeURIComponent(token.trim().toUpperCase())}`);
-  if (!res.ok) {
-    if (res.status === 404) {
-      throw new Error(`Patient not found. Please check your token or contact reception.`);
-    }
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Unable to retrieve patient tracking.`);
-  }
-  return res.json();
+  return apiRequest<PatientTrackingInfo>(`/queue/patient/${encodeURIComponent(token.trim().toUpperCase())}`);
 }
 
 export async function checkInPatient(patientId: number): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/check-in/${patientId}`, {
+  return apiRequest<{ success: boolean; patient: Patient }>(`/queue/check-in/${patientId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to check in patient`);
-  }
-  return res.json();
 }
 
 export async function callNextPatient(doctorId: string = 'dr-kumar'): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/call-next`, {
+  return apiRequest<{ success: boolean; patient: Patient }>('/queue/call-next', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ doctor_id: doctorId }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `No patients are currently waiting.`);
-  }
-  return res.json();
 }
 
 export async function startConsultation(patientId: number): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/start-consultation/${patientId}`, {
+  return apiRequest<{ success: boolean; patient: Patient }>(`/queue/start-consultation/${patientId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to start consultation`);
-  }
-  return res.json();
 }
 
 export async function completeConsultation(patientId: number): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/complete-consultation/${patientId}`, {
+  return apiRequest<{ success: boolean; patient: Patient }>(`/queue/complete-consultation/${patientId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to complete consultation`);
-  }
-  return res.json();
 }
 
 export async function skipPatient(patientId: number): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/skip/${patientId}`, {
+  return apiRequest<{ success: boolean; patient: Patient }>(`/queue/skip/${patientId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to skip patient`);
-  }
-  return res.json();
 }
 
 export async function noShowPatient(patientId: number): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/no-show/${patientId}`, {
+  return apiRequest<{ success: boolean; patient: Patient }>(`/queue/no-show/${patientId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to mark no-show`);
-  }
-  return res.json();
 }
 
 export async function addWalkInPatient(
@@ -101,91 +104,63 @@ export async function addWalkInPatient(
   phone: string,
   doctorId: string = 'dr-kumar'
 ): Promise<{ success: boolean; patient: Patient }> {
-  const res = await fetch(`${API_BASE}/queue/walk-in`, {
+  return apiRequest<{ success: boolean; patient: Patient }>('/queue/walk-in', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ patient_name: patientName, phone, doctor_id: doctorId }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to register walk-in patient`);
-  }
-  return res.json();
 }
 
 export async function importAppointmentsCsv(
   appointments: Array<{ patient_name: string; phone?: string; appointment_time: string; doctor_name?: string }>,
   doctorId: string = 'dr-kumar'
-): Promise<{ success: boolean; count: number; message: string; imported: Patient[] }> {
-  const res = await fetch(`${API_BASE}/queue/import-appointments`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ appointments, doctor_id: doctorId }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Import failed: server returned ${res.status}`);
-  }
-  return res.json();
+): Promise<{ success: boolean; count: number; message: string; imported: Patient[]; errors?: string[] }> {
+  return apiRequest<{ success: boolean; count: number; message: string; imported: Patient[]; errors?: string[] }>(
+    '/queue/import-appointments',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appointments, doctor_id: doctorId }),
+    }
+  );
 }
 
 export async function updatePatientStatus(patientId: number, status: PatientStatus): Promise<Patient> {
-  const res = await fetch(`${API_BASE}/patients/${patientId}/status`, {
+  return apiRequest<Patient>(`/patients/${patientId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
-  if (!res.ok) {
-    throw new Error(`Failed to update patient status: ${res.statusText}`);
-  }
-  return res.json();
 }
 
 export async function updateDoctorStatus(doctorId: string, delayStatus: string): Promise<Doctor> {
-  const res = await fetch(`${API_BASE}/doctors/${doctorId}/delay`, {
+  return apiRequest<Doctor>(`/doctors/${doctorId}/delay`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ delay_status: delayStatus }),
   });
-  if (!res.ok) {
-    throw new Error(`Failed to update doctor status: ${res.statusText}`);
-  }
-  return res.json();
 }
 
 export async function updateDoctorAvgConsultationTime(doctorId: string, avgMinutes: number): Promise<Doctor> {
-  const res = await fetch(`${API_BASE}/doctors/${doctorId}/consultation-time`, {
+  return apiRequest<Doctor>(`/doctors/${doctorId}/consultation-time`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ avg_consultation_time: avgMinutes }),
   });
-  if (!res.ok) {
-    throw new Error(`Failed to update average consultation time: ${res.statusText}`);
-  }
-  return res.json();
 }
 
 export async function resetDemoData(mode: 'active_demo' | 'all_booked' = 'active_demo'): Promise<{ message: string; overview: QueueOverview }> {
-  const res = await fetch(`${API_BASE}/demo/reset`, {
+  return apiRequest<{ message: string; overview: QueueOverview }>('/demo/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode }),
   });
-  if (!res.ok) {
-    throw new Error(`Failed to reset demo data: ${res.statusText}`);
-  }
-  return res.json();
 }
 
 export async function deleteAllAppointments(doctorId?: string): Promise<{ success: boolean; count: number; message: string }> {
   const query = doctorId && doctorId !== 'ALL' ? `?doctor_id=${encodeURIComponent(doctorId)}` : '';
-  const res = await fetch(`${API_BASE}/queue/all${query}`, {
+  return apiRequest<{ success: boolean; count: number; message: string }>(`/queue/all${query}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Failed to delete appointments`);
-  }
-  return res.json();
 }

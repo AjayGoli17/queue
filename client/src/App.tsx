@@ -137,13 +137,12 @@ export function App() {
         {/* 4. PATIENT TRACKING ROUTE: /track/:token & /track (Section 6) */}
         <Route
           path="/track/:token"
-          element={
-            <div className="pt-shell bg-slate-50 text-slate-900">
-              <PatientTrackingPage />
-            </div>
-          }
+          element={<PatientTrackingPage />}
         />
-        <Route path="/track" element={<Navigate to="/track/A07" replace />} />
+        <Route
+          path="/track"
+          element={<PatientTrackingPage />}
+        />
 
         {/* 5. CATCH-ALL ROUTE -> Redirect to Launcher */}
         <Route path="*" element={<Navigate to="/" replace />} />

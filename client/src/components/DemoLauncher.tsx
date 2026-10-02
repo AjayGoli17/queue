@@ -9,7 +9,6 @@ import {
   ExternalLink,
   Sparkles,
   Stethoscope,
-  Clock,
   ShieldCheck,
 } from 'lucide-react';
 

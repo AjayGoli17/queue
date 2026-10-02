@@ -25,7 +25,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard shortcut 'F' or double-click to toggle fullscreen
+  // Fullscreen keyboard shortcut ('F') and double-click
   useEffect(() => {
     const toggle = () => {
       if (!document.fullscreenElement) {
@@ -45,10 +45,12 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
     };
   }, []);
 
-  // Show at least 15 real queue entries simultaneously when available (or all if fewer)
+  // Display at least 15 real queue records simultaneously when available (or all real ones if fewer)
   const visiblePatients = useMemo(() => {
     return next_patients.slice(0, 15);
   }, [next_patients]);
+
+  const queueCount = stats?.waiting ?? next_patients.length;
 
   // Tracking QR code URL pointing to the patient tracking route
   const trackUrl = useMemo(() => `${window.location.origin}/track`, []);
@@ -96,9 +98,9 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
         </div>
       </header>
 
-      {/* 2. CORE QUEUE INFORMATION (~80% usable height, 45% / 55% width split) */}
+      {/* 2. CORE QUEUE INFORMATION (40% LEFT / 60% RIGHT SPLIT) */}
       <main className="tv-main-grid">
-        {/* LEFT: NOW SERVING (≈ 45% width, visual focal point) */}
+        {/* LEFT: NOW SERVING (40% width, dominant token) */}
         <section className="tv-serving-card">
           <div className="tv-card-head">
             <div className="tv-section-title">
@@ -106,7 +108,11 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               <span>NOW SERVING</span>
             </div>
             <span className="tv-serving-badge">
-              {current_patient?.status === 'CALLED' ? 'Active Call' : 'In Consultation'}
+              {current_patient?.status === 'CALLED'
+                ? 'Active Call'
+                : current_patient?.status === 'IN_CONSULTATION'
+                ? 'In Consultation'
+                : 'Waiting'}
             </span>
           </div>
 
@@ -131,10 +137,10 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               </>
             ) : (
               <>
-                <div className="tv-serving-token" style={{ color: '#94a3b8' }}>
+                <div className="tv-serving-token is-empty">
                   --
                 </div>
-                <div className="tv-serving-name" style={{ color: '#64748b' }}>
+                <div className="tv-serving-name is-empty">
                   Next Patient Calling Shortly
                 </div>
                 <div className="tv-serving-meta">
@@ -149,7 +155,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
           </div>
         </section>
 
-        {/* RIGHT: NEXT IN LINE (≈ 55% width, shows at least 15 tokens simultaneously) */}
+        {/* RIGHT: NEXT IN LINE (60% width, shows up to 15 tokens simultaneously) */}
         <section className="tv-queue-card">
           <div className="tv-card-head">
             <div className="tv-section-title">
@@ -157,7 +163,7 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
               <span>NEXT IN LINE</span>
             </div>
             <span className="tv-queue-count-badge">
-              {next_patients.length} IN QUEUE
+              {queueCount} IN QUEUE
             </span>
           </div>
 
@@ -201,14 +207,14 @@ export const WaitingRoomTVDisplay: React.FC<WaitingRoomTVDisplayProps> = ({ over
       {/* 3. MIDDLE QUEUE STATUS BAR */}
       <div className="tv-status-bar">
         <span>QUEUE STATUS</span>
-        <span className="tv-status-count">{stats.waiting || next_patients.length} PATIENTS WAITING</span>
+        <span className="tv-status-count">{queueCount} PATIENTS WAITING</span>
         <div className="tv-status-live">
           <span className="tv-status-dot animate-pulse" />
           <span>LIVE UPDATES</span>
         </div>
       </div>
 
-      {/* 4. SUPPORTING INFORMATION (~20% usable height, two simple cards) */}
+      {/* 4. SUPPORTING INFORMATION (TRACK TOKEN & ANNOUNCEMENT) */}
       <div className="tv-bottom-grid">
         {/* TRACK YOUR TOKEN */}
         <div className="tv-track-card">

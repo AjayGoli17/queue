@@ -93,6 +93,16 @@ export async function getDatabase(): Promise<IDatabaseClient> {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
+  // Remove stale postmaster.pid lock file if server crashed or was terminated previously
+  const pidFile = path.join(dataDir, 'postmaster.pid');
+  if (fs.existsSync(pidFile)) {
+    try {
+      fs.unlinkSync(pidFile);
+    } catch {
+      // ignore
+    }
+  }
+
   try {
     console.log(`Initializing Embedded PostgreSQL database in ${dataDir}...`);
     const pglite = new PGlite(dataDir);

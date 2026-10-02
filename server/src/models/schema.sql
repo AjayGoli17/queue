@@ -1,10 +1,5 @@
 -- PostgreSQL Schema for Hospital Queue & Patient Flow Management System
 
--- Drop tables if needed for reset
-DROP TABLE IF EXISTS queues CASCADE;
-DROP TABLE IF EXISTS patients CASCADE;
-DROP TABLE IF EXISTS doctors CASCADE;
-
 -- Doctors Table
 CREATE TABLE IF NOT EXISTS doctors (
     id VARCHAR(50) PRIMARY KEY,
